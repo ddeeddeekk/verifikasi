@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sistem Pemindai & Verifikasi Peserta Ujian</title>
+  
+  <!-- PWA Manifest & Icons -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="theme-color" content="#065f46">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cek Peserta">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- HTML5 QR Code Scanner Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <!-- Supabase JS Client Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body {
+      background-color: #f6f8f6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #reader video {
+      border-radius: 1rem;
+      object-fit: cover !important;
+      width: 100% !important;
+      height: 100% !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
+    #reader {
+      border: none !important;
+      position: relative !important;
+      overflow: hidden !important;
+    }
+    #reader #reader__scan_region {
+      width: 100% !important;
+      height: 100% !important;
+      min-height: unset !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f3;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #a7d7c5;
+      border-radius: 999px;
+    }
+    .custom-modal-backdrop {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between selection:bg-emerald-600 selection:text-white pb-24">
+
+  <!-- HEADER STATUS & PENGATURAN -->
+  <header class="bg-white/95 backdrop-blur-sm border-b border-emerald-100 sticky top-0 z-30">
+    <div class="max-w-4xl mx-auto px-3.5 sm:px-5 py-2 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-7 h-7 rounded-lg bg-emerald-800 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+          <i class="fa-solid fa-qrcode text-xs"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-xs sm:text-sm font-black text-slate-800 truncate leading-tight">Cek Peserta Ujian</h1>
+          <div class="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+            <span id="badge-db-status" class="inline-block w-2 h-2 rounded-full bg-amber-400"></span>
+            <span id="label-db-backend" class="truncate">Menghubungkan...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <button id="btn-sync-pending" onclick="syncPendingQueue(false)" class="hidden px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Sinkronkan Antrean Offline">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span id="lbl-pending-count">0</span>
+        </button>
+        <button id="btn-install-pwa" onclick="triggerPWAInstall()" class="hidden px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Pasang Aplikasi (PWA)">
+          <i class="fa-solid fa-download"></i>
+          <span class="hidden sm:inline">Pasang</span>
+        </button>
+        <button onclick="toggleConfigModal(true)" class="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-700 hover:text-emerald-800 text-[11px] font-bold flex items-center gap-1.5 transition active:scale-95" title="Pengaturan Koneksi Supabase">
+          <i class="fa-solid fa-database text-emerald-700"></i>
+          <span class="hidden xs:inline">Database</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- TOAST NOTIFIKASI ELEGAN -->
+  <div id="toast-notify" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-[-10px] w-11/12 max-w-sm">
+    <div id="toast-box" class="px-3.5 py-2.5 rounded-xl shadow-xl border text-xs font-semibold flex items-center gap-2 justify-center bg-emerald-800 text-white border-emerald-700">
+      <i id="toast-icon" class="fa-solid fa-circle-check"></i>
+      <span id="toast-msg">Data tersimpan otomatis</span>
+    </div>
+  </div>
+
+
+
+  <!-- KONTEN UTAMA -->
+  <main class="max-w-4xl mx-auto px-3.5 sm:px-5 py-3 flex-1 w-full space-y-3">
+
+    <!-- ==================== TAB 1: PEMINDAI & VERIFIKASI ==================== -->
+    <section id="section-scanner" class="block space-y-3">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+        
+        <!-- KOLOM KIRI: PEMINDAI KAMERA -->
+        <div class="md:col-span-5 space-y-2.5">
+          <div class="bg-white rounded-2xl shadow-sm border border-emerald-100/90 p-3 sm:p-4">
+            <!-- Kamera Viewport 1:1 Presisi -->
+            <div class="w-full max-w-[240px] mx-auto aspect-square">
+              <div id="reader" class="w-full h-full bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center text-slate-400 relative border border-slate-800 shadow-inner">
+                <div id="camera-placeholder" class="text-center p-5 z-10">
+                  <i class="fa-solid fa-camera text-3xl mb-1.5 text-slate-500"></i>
+                  <p class="text-[11px] text-slate-400">Kamera dinonaktifkan</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Kontrol Kamera & Pilihan Lensa -->
+            <div class="mt-2.5 space-y-2">
+              <div class="grid grid-cols-12 gap-1.5 items-center">
+                <button id="btn-start-camera" onclick="startScanner()" class="col-span-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-camera"></i> <span>Buka Kamera</span>
+                </button>
+                
+                <button id="btn-stop-camera" onclick="stopScanner()" class="col-span-4 py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-600 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1.5 disabled:opacity-40" disabled>
+                  <i class="fa-solid fa-stop"></i> <span>Matikan</span>
+                </button>
+
+                <button id="btn-toggle-cam-settings" onclick="toggleCameraSettings()" class="col-span-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-200 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1" title="Pengaturan Lensa & Zoom">
+                  <i class="fa-solid fa-sliders"></i> <span class="hidden xs:inline">Lensa</span>
+                </button>
+              </div>
+
+              <!-- Panel Pengaturan Lensa & Zoom -->
+              <div id="cam-settings-panel" class="hidden bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 space-y-2 text-xs transition-all">
+                <div class="flex items-center gap-2">
+                  <label for="camera-select" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    <i class="fa-solid fa-camera-rotate mr-0.5 text-emerald-600"></i> Lensa:
+                  </label>
+                  <select id="camera-select" onchange="changeCamera(this.value)" class="flex-1 bg-white border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none truncate">
+                    <option value="">Otomatis (Lensa Utama 1x)</option>
+                  </select>
+                </div>
+
+                <div id="zoom-control-container" class="hidden flex items-center justify-between gap-2 pt-1 border-t border-slate-200/70">
+                  <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    <i class="fa-solid fa-magnifying-glass-plus mr-0.5 text-emerald-600"></i> Zoom:
+                  </span>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="setZoomLevel(1)" class="px-2 py-0.5 text-[10px] font-bold bg-white border border-slate-200 text-slate-700 rounded-md hover:bg-emerald-50 active:scale-95">1x</button>
+                    <button type="button" onclick="setZoomLevel(1.5)" class="px-2 py-0.5 text-[10px] font-bold bg-white border border-slate-200 text-slate-700 rounded-md hover:bg-emerald-50 active:scale-95">1.5x</button>
+                    <button type="button" onclick="setZoomLevel(2)" class="px-2 py-0.5 text-[10px] font-bold bg-white border border-slate-200 text-slate-700 rounded-md hover:bg-emerald-50 active:scale-95">2x</button>
+                    <input type="range" id="zoom-slider" min="1" max="3" step="0.1" value="1" oninput="applyZoom(this.value)" class="w-20 accent-emerald-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- KOLOM KANAN: HASIL VERIFIKASI PESERTA -->
+        <div class="md:col-span-7 space-y-3">
+          <div class="bg-white rounded-2xl shadow-sm border border-emerald-100/90 p-4 sm:p-5 flex flex-col justify-between">
+            <div class="space-y-2.5">
+              
+              <!-- FOTO & INFO PESERTA -->
+              <div class="flex gap-2.5 items-stretch">
+                <div class="w-24 sm:w-28 flex-shrink-0 bg-slate-50/80 rounded-2xl border border-slate-200/80 overflow-hidden relative flex items-center justify-center shadow-sm">
+                  <img id="val-foto-peserta" src="" alt="Foto" class="w-full h-full object-cover hidden" onerror="handlePhotoError()">
+                  <div id="val-foto-placeholder" class="text-center p-2 text-slate-400">
+                    <i class="fa-solid fa-user text-3xl"></i>
+                    <span class="block text-[8px] font-bold uppercase mt-1 tracking-wider text-slate-400">FOTO</span>
+                  </div>
+                </div>
+
+                <div class="flex-1 flex flex-col justify-between gap-2 min-w-0">
+                  <div class="grid grid-cols-2 gap-2 min-w-0">
+                    <div class="bg-emerald-50/40 p-2 sm:p-2.5 rounded-2xl border border-emerald-200/70 flex flex-col justify-center min-w-0 overflow-hidden">
+                      <span class="text-[8px] sm:text-[9px] font-bold text-emerald-800 uppercase tracking-wider block truncate">NO. PESERTA</span>
+                      <span id="val-no-peserta" class="text-xs sm:text-sm font-bold text-emerald-950 font-mono tracking-tight truncate leading-tight mt-0.5">-</span>
+                    </div>
+
+                    <div class="bg-emerald-500/10 p-2 sm:p-2.5 rounded-2xl border border-emerald-300/60 flex flex-col justify-center min-w-0 overflow-hidden">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="text-[8px] sm:text-[9px] font-bold text-emerald-900 uppercase tracking-wider truncate">NO. KURSI</span>
+                        <span id="val-no-kursi" class="text-sm sm:text-base font-black text-emerald-800 font-mono leading-none">--</span>
+                      </div>
+                      <span id="val-ruang-bawah-kursi" class="text-[8px] sm:text-[9px] font-black text-emerald-700 uppercase tracking-wider mt-1 truncate">RUANG : </span>
+                    </div>
+                  </div>
+
+                  <div class="bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 flex flex-col justify-center min-w-0">
+                    <span class="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider block">NAMA PESERTA</span>
+                    <span id="val-nama" class="text-sm sm:text-base font-black text-slate-800 uppercase block mt-0.5 tracking-wide leading-snug line-clamp-2 break-words whitespace-normal">-</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TANGGAL TES & SESI -->
+              <div class="grid grid-cols-12 gap-2">
+                <div id="box-tgl-tes" class="col-span-8 bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 transition-colors duration-200 flex flex-col justify-center min-w-0 overflow-hidden">
+                  <div class="flex items-center justify-between gap-1">
+                    <span id="lbl-tgl-tes" class="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">TGL. TES</span>
+                    <span id="badge-tgl-warning" class="hidden text-[7px] sm:text-[8px] font-extrabold uppercase px-1 py-0.5 rounded bg-rose-600 text-white tracking-tight animate-pulse whitespace-nowrap flex-shrink-0">
+                      BUKAN HARI INI
+                    </span>
+                  </div>
+                  <span id="val-tgl-tes" class="text-[13px] sm:text-[15px] font-bold text-slate-800 block mt-0.5 leading-snug truncate">-</span>
+                </div>
+
+                <div id="box-waktu" class="col-span-4 bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 flex flex-col justify-center transition-colors duration-200 min-w-0 overflow-hidden">
+                  <div class="flex items-center justify-between gap-1">
+                    <span id="lbl-waktu" class="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">SESI</span>
+                    <span id="badge-waktu-warning" class="hidden text-[7px] sm:text-[8px] font-extrabold uppercase px-1 py-0.5 rounded bg-rose-600 text-white tracking-tight animate-pulse whitespace-nowrap flex-shrink-0">
+                      LUAR SESI
+                    </span>
+                  </div>
+                  <span id="val-waktu" class="text-xs sm:text-sm font-bold text-slate-800 block mt-0.5 leading-snug truncate">-</span>
+                </div>
+              </div>
+
+              <!-- Catatan Petugas -->
+              <div>
+                <input type="text" id="scan-note" placeholder="Catatan petugas (opsional): Verifikasi berkas fisik" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50">
+              </div>
+            </div>
+
+            <!-- Tombol Simpan Manual -->
+            <div class="mt-2 pt-1.5 border-t border-slate-100">
+              <div id="warning-notice-manual" class="hidden mb-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-1.5 font-medium">
+                <i class="fa-solid fa-triangle-exclamation text-rose-600 flex-shrink-0"></i>
+                <span>Jadwal tidak sesuai! Tekan Simpan jika tetap diizinkan.</span>
+              </div>
+              <button id="btn-save-record" onclick="saveCurrentRecord(true)" class="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-40" disabled>
+                <i class="fa-solid fa-floppy-disk"></i> <span id="lbl-save-button">Simpan ke kehadiran</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: RIWAYAT VERIFIKASI ==================== -->
+    <section id="section-history" class="hidden space-y-3">
+      <div class="bg-white rounded-2xl shadow-sm border border-emerald-100/90 p-3 sm:p-4 space-y-3">
+        
+        <!-- HEADER TABEL LOG -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div>
+            <h2 class="text-sm sm:text-base font-black text-slate-800">Log Kehadiran Peserta</h2>
+            <p class="text-[11px] text-slate-400">Sinkronisasi langsung dengan database.</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="relative flex-1 sm:flex-initial">
+              <input type="text" id="history-search" oninput="filterHistoryTable()" placeholder="Cari peserta..." class="py-1.5 pl-7 pr-2.5 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none w-full sm:w-48 bg-slate-50/50">
+              <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-[10px]"></i>
+            </div>
+            <button onclick="refreshData(false)" class="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition" title="Refresh Data">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+            <button onclick="exportCSV()" class="py-1.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm" title="Ekspor CSV">
+              <i class="fa-solid fa-file-excel"></i> <span>Ekspor</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- PANEL STATISTIK RINGKASAN KEHADIRAN -->
+        <div class="bg-slate-50 border border-slate-200/90 rounded-2xl p-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
+            <div class="flex items-center gap-1.5">
+              <i class="fa-solid fa-chart-simple text-emerald-700 text-xs"></i>
+              <span class="text-[11px] font-black uppercase tracking-wider text-slate-700">RINGKASAN KEHADIRAN SAAT INI</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] font-bold">
+              <span id="stat-info-tgl" class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 font-mono shadow-sm">-</span>
+              <span id="stat-info-sesi" class="px-2 py-0.5 rounded-md bg-emerald-100/80 border border-emerald-300 text-emerald-800 uppercase tracking-tight shadow-sm">-</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <div class="bg-white rounded-xl p-2.5 border border-emerald-200 shadow-sm text-center flex flex-col justify-center">
+              <span class="text-[9px] font-bold uppercase text-slate-400 tracking-wider">TOTAL</span>
+              <span id="stat-total-session" class="text-xl sm:text-2xl font-black text-emerald-800 font-mono mt-0.5">0</span>
+            </div>
+            <div class="bg-white rounded-xl p-2.5 border border-slate-200 shadow-sm text-center flex flex-col justify-center">
+              <span class="text-[9px] font-bold uppercase text-emerald-700 tracking-wider">LT. 2</span>
+              <span id="stat-lt2-session" class="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">0</span>
+            </div>
+            <div class="bg-white rounded-xl p-2.5 border border-slate-200 shadow-sm text-center flex flex-col justify-center">
+              <span class="text-[9px] font-bold uppercase text-emerald-700 tracking-wider">LT. 3</span>
+              <span id="stat-lt3-session" class="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabel Log Riwayat -->
+        <div class="overflow-x-auto rounded-xl border border-slate-200/80 max-h-[460px] overflow-y-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="sticky top-0 bg-emerald-50/90 backdrop-blur-sm z-10">
+              <tr class="text-emerald-950 border-b border-emerald-200/80 font-semibold text-[11px]">
+                <th class="py-2.5 px-2.5 text-center w-10">No.</th>
+                <th class="py-2.5 px-3">Waktu</th>
+                <th class="py-2.5 px-3">No. Peserta</th>
+                <th class="py-2.5 px-3">Nama</th>
+                <th class="py-2.5 px-3">Tgl. Tes</th>
+                <th class="py-2.5 px-3">Ruang / Sesi</th>
+                <th class="py-2.5 px-3 text-center">Kursi</th>
+                <th class="py-2.5 px-3">Catatan</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Item terisi lewat JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BOTTOM BAR NAVIGASI -->
+  <nav class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-emerald-100 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] z-40">
+    <div class="max-w-md mx-auto grid grid-cols-12 p-1.5 gap-2 items-center">
+      <div class="col-span-6 grid grid-cols-12 gap-1.5 items-center">
+        <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="col-span-8 flex items-center justify-center py-2.5 px-3 rounded-xl bg-emerald-800 text-white shadow-sm transition active:scale-95" title="Kamera Pemindai">
+          <i class="fa-solid fa-camera text-lg"></i>
+        </button>
+
+        <button onclick="resetDisplayOnly()" id="btn-reset-display" class="col-span-4 flex items-center justify-center py-2.5 px-2 rounded-xl bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 border border-slate-200/80 transition active:scale-95" title="Reset Tampilan Data">
+          <i class="fa-solid fa-arrows-rotate text-sm"></i>
+        </button>
+      </div>
+
+      <button onclick="switchTab('history')" id="tab-btn-history" class="col-span-6 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-slate-600 hover:text-emerald-800 hover:bg-emerald-50/60 transition active:scale-95 border border-transparent" title="Log Kehadiran">
+        <i class="fa-solid fa-clock-rotate-left text-lg flex-shrink-0"></i>
+        <div id="counter-box" class="flex flex-col text-left font-mono text-[9px] sm:text-[10px] leading-tight font-extrabold px-1.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60">
+          <div>
+            <span>LT. 2: <strong id="count-lt2" class="text-emerald-700 font-black text-xs">0</strong></span>
+          </div>
+          <div>
+            <span>LT. 3: <strong id="count-lt3" class="text-emerald-700 font-black text-xs">0</strong></span>
+          </div>
+        </div>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MODAL KONFIGURASI SUPABASE & SKEMA SQL -->
+  <div id="config-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 custom-modal-backdrop transition-opacity duration-200 hidden">
+    <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 w-full max-w-xl max-h-[90vh] overflow-y-auto space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-database text-emerald-700 text-lg"></i>
+          <h3 class="text-base font-black text-slate-800">Konfigurasi Database Supabase</h3>
+        </div>
+        <button onclick="toggleConfigModal(false)" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Form Credentials Supabase -->
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Supabase Project URL</label>
+          <input type="text" id="cfg-supabase-url" placeholder="https://xyzcompany.supabase.co" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 font-mono text-[11px]">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Supabase Anon Key (Public)</label>
+          <input type="password" id="cfg-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 font-mono text-[11px]">
+        </div>
+        
+        <div class="flex items-center justify-between pt-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="cfg-preview-mode" class="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4">
+            <span class="text-slate-700 font-semibold">Mode Uji Coba Offline (IS_PREVIEW = true)</span>
+          </label>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button onclick="saveSupabaseSettings()" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-sm active:scale-95 transition">
+            Simpan & Hubungkan
+          </button>
+          <button onclick="testSupabaseConnection()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs active:scale-95 transition">
+            Tes Koneksi
+          </button>
+          <button onclick="resetSupabaseSettings()" class="px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs active:scale-95 transition" title="Hapus kredensial tersimpan di browser">
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <!-- SQL Schema Generator -->
+      <div class="pt-3 border-t border-slate-100 space-y-2">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs font-black text-slate-800">Skema SQL Supabase (Attendance Logs)</h4>
+          <button onclick="copySQLSchema()" class="px-2.5 py-1 text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg active:scale-95 transition flex items-center gap-1">
+            <i class="fa-solid fa-copy"></i> <span>Salin SQL</span>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-500">Jalankan kode SQL berikut di <strong>Supabase Dashboard &gt; SQL Editor</strong> proyek Anda untuk membuat tabel otomatis:</p>
+        <pre id="sql-schema-code" class="bg-slate-900 text-emerald-300 p-3 rounded-xl text-[10px] sm:text-[11px] font-mono overflow-x-auto whitespace-pre leading-relaxed select-all">-- 1. Buat Tabel Attendance Logs
+CREATE TABLE IF NOT EXISTS attendance_logs (
+    id BIGSERIAL PRIMARY KEY,
+    scanned_at TIMESTAMPTZ DEFAULT NOW(),
+    no_peserta VARCHAR(20) UNIQUE NOT NULL CHECK (char_length(trim(no_peserta)) >= 10),
+    nama VARCHAR(150) NOT NULL CHECK (char_length(trim(nama)) > 0),
+    tgl_tes VARCHAR(50),
+    ruang VARCHAR(50),
+    waktu VARCHAR(50),
+    kursi VARCHAR(10),
+    note VARCHAR(255),
+    raw_code TEXT,
+    photo_url TEXT
+);
+
+-- 2. Aktifkan Row Level Security (RLS)
+ALTER TABLE attendance_logs ENABLE ROW LEVEL SECURITY;
+
+-- 3. Kebijakan Akses Baca & Tulis
+-- Catatan Keamanan: Untuk produksi, disarankan memakai Supabase Auth dan mengganti
+-- "anon" dengan "TO authenticated" agar hanya petugas login yang dapat mengakses data.
+CREATE POLICY "Allow public read access"
+ON attendance_logs FOR SELECT
+USING (true);
+
+CREATE POLICY "Allow public insert access"
+ON attendance_logs FOR INSERT
+WITH CHECK (char_length(trim(no_peserta)) >= 10);
+
+-- 4. Indeks untuk Pencarian Cepat
+CREATE INDEX IF NOT EXISTS idx_attendance_no_peserta ON attendance_logs(no_peserta);
+CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_at DESC);</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT LOGIKA UTAMA -->
+  <script>
+    // =========================================================================
+    // KONFIGURASI SUPABASE DEFAULT & LOCAL STORAGE
+    // =========================================================================
+    // Kredensial default atau yang tersimpan di LocalStorage browser
+    const STORAGE_KEY_URL = "scan_supabase_url";
+    const STORAGE_KEY_KEY = "scan_supabase_key";
+    const STORAGE_KEY_PREVIEW = "scan_is_preview";
+    const STORAGE_KEY_LOCAL_HISTORY = "scan_local_history";
+    const STORAGE_KEY_PENDING_QUEUE = "scan_pending_queue";
+
+    const DEFAULT_SUPABASE_URL = "https://cjndrjrgjsqlrgboeieq.supabase.co";
+    const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqbmRyanJnanNxbHJnYm9laWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MTAyMDQsImV4cCI6MjEwOTQ4NjIwNH0.3pNZA28YXpFZ-MQMd3oYEy87CifIb_lTo81sKeTUHCY";
+
+    // Silakan isi lewat tombol 'Database' di header
+    let SUPABASE_URL = localStorage.getItem(STORAGE_KEY_URL) || DEFAULT_SUPABASE_URL;
+    let SUPABASE_ANON_KEY = localStorage.getItem(STORAGE_KEY_KEY) || DEFAULT_SUPABASE_ANON_KEY;
+    let IS_PREVIEW = localStorage.getItem(STORAGE_KEY_PREVIEW) === "true";
+
+    // Inisialisasi Supabase Client
+    let supabaseClient = null;
+    function initSupabase() {
+      try {
+        if (!IS_PREVIEW && SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes("your-project-id") && window.supabase) {
+          supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          if (!navigator.onLine) {
+            updateDatabaseBadge("preview", "Offline (Cache Lokal)");
+          } else {
+            updateDatabaseBadge("online", "Supabase Cloud Terhubung");
+          }
+        } else {
+          supabaseClient = null;
+          updateDatabaseBadge("preview", IS_PREVIEW ? "Mode Preview (Lokal)" : "Supabase Belum Diatur");
+        }
+      } catch (err) {
+        console.error("Gagal inisialisasi Supabase:", err);
+        updateDatabaseBadge("error", "Koneksi Error");
+      }
+    }
+
+    function updateDatabaseBadge(status, text) {
+      const badge = document.getElementById("badge-db-status");
+      const label = document.getElementById("label-db-backend");
+      if (!badge || !label) return;
+
+      label.innerText = text;
+      if (status === "online") {
+        badge.className = "inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+      } else if (status === "preview") {
+        badge.className = "inline-block w-2 h-2 rounded-full bg-amber-400";
+      } else {
+        badge.className = "inline-block w-2 h-2 rounded-full bg-rose-500";
+      }
+    }
+
+    // Offset Formula Spreadsheet: ASCII = Kode Angka - 348
+    const ASCII_OFFSET = 348;
+
+    let html5QrCode = null;
+    let currentParticipantData = null;
+    let availableCameras = [];
+    let selectedCameraId = null;
+    let activeMediaTrack = null;
+    let zoomCapabilities = null;
+
+    // Cooldown scan duplikat
+    let lastScannedRaw = "";
+    let lastScannedTimestamp = 0;
+    const DUPLICATE_COOLDOWN_MS = 3000;
+
+    // Database Riwayat & Antrean Offline (persisten di localStorage)
+    let scanHistory = [];
+    let pendingQueue = [];
+    let isSyncingQueue = false;
+    let deferredInstallPrompt = null;
+    let sharedAudioCtx = null;
+
+    function loadLocalCache() {
+      try {
+        const rawHistory = localStorage.getItem(STORAGE_KEY_LOCAL_HISTORY);
+        if (rawHistory) {
+          const parsed = JSON.parse(rawHistory);
+          if (Array.isArray(parsed)) scanHistory = parsed;
+        }
+      } catch (e) {
+        console.warn("Gagal membaca riwayat lokal:", e);
+      }
+      try {
+        const rawQueue = localStorage.getItem(STORAGE_KEY_PENDING_QUEUE);
+        if (rawQueue) {
+          const parsedQ = JSON.parse(rawQueue);
+          if (Array.isArray(parsedQ)) pendingQueue = parsedQ;
+        }
+      } catch (e) {
+        console.warn("Gagal membaca antrean offline:", e);
+      }
+      mergePendingIntoHistory();
+      updatePendingSyncBadge();
+    }
+
+    function saveLocalHistory() {
+      try {
+        localStorage.setItem(STORAGE_KEY_LOCAL_HISTORY, JSON.stringify(scanHistory.slice(0, 1500)));
+      } catch (e) {
+        console.warn("Gagal menyimpan riwayat lokal:", e);
+      }
+    }
+
+    function savePendingQueue() {
+      try {
+        localStorage.setItem(STORAGE_KEY_PENDING_QUEUE, JSON.stringify(pendingQueue));
+      } catch (e) {
+        console.warn("Gagal menyimpan antrean offline:", e);
+      }
+      updatePendingSyncBadge();
+    }
+
+    function mergePendingIntoHistory() {
+      if (!pendingQueue.length) return;
+      const existingNos = new Set(
+        scanHistory.map(i => String(i.noPeserta || i.no_peserta || "").trim().replace(/\D/g, ''))
+      );
+      for (let i = pendingQueue.length - 1; i >= 0; i--) {
+        const qItem = pendingQueue[i];
+        const cleanNo = String(qItem.record.noPeserta || "").trim().replace(/\D/g, '');
+        if (!existingNos.has(cleanNo)) {
+          scanHistory.unshift({ ...qItem.record, isPending: true });
+          existingNos.add(cleanNo);
+        }
+      }
+    }
+
+    function updatePendingSyncBadge() {
+      const btn = document.getElementById("btn-sync-pending");
+      const lbl = document.getElementById("lbl-pending-count");
+      if (!btn || !lbl) return;
+      if (pendingQueue.length > 0) {
+        lbl.innerText = `${pendingQueue.length} Antrean`;
+        btn.classList.remove("hidden");
+      } else {
+        btn.classList.add("hidden");
+      }
+    }
+
+    const NAMA_HARI = [
+      "MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU"
+    ];
+
+    const NAMA_BULAN = [
+      "", "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+      "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"
+    ];
+
+    /* -------------------------------------------------------------------------
+       0. TOAST NOTIFIKASI ELEGAN
+    ------------------------------------------------------------------------- */
+    let toastTimeout = null;
+    function showToast(message, type = "success") {
+      const toast = document.getElementById("toast-notify");
+      const box = document.getElementById("toast-box");
+      const icon = document.getElementById("toast-icon");
+      const msg = document.getElementById("toast-msg");
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+
+      msg.innerText = message;
+      if (type === "success") {
+        box.className = "px-3.5 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 justify-center bg-emerald-800 text-white border-emerald-700";
+        icon.className = "fa-solid fa-circle-check text-emerald-300";
+      } else if (type === "warning") {
+        box.className = "px-3.5 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 justify-center bg-amber-700 text-white border-amber-600";
+        icon.className = "fa-solid fa-triangle-exclamation text-amber-200";
+      } else {
+        box.className = "px-3.5 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 justify-center bg-rose-800 text-white border-rose-700";
+        icon.className = "fa-solid fa-circle-xmark text-rose-300";
+      }
+
+      toast.classList.remove("opacity-0", "translate-y-[-10px]");
+      toast.classList.add("opacity-100", "translate-y-0");
+
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove("opacity-100", "translate-y-0");
+        toast.classList.add("opacity-0", "translate-y-[-10px]");
+      }, 2400);
+    }
+
+    function handlePhotoError() {
+      const img = document.getElementById("val-foto-peserta");
+      const placeholder = document.getElementById("val-foto-placeholder");
+      if (img) img.classList.add("hidden");
+      if (placeholder) placeholder.classList.remove("hidden");
+    }
+
+    /* -------------------------------------------------------------------------
+       1. DEKODER FORMULA ASCII (Offset -348)
+    ------------------------------------------------------------------------- */
+    function decodeSubstitutedNumbers(inputStr) {
+      if (!inputStr) return "";
+      const cleanStr = String(inputStr).trim();
+      let chunks = [];
+
+      if (/[;,\s\n]/.test(cleanStr)) {
+        chunks = cleanStr.split(/[;,\s\n]+/).filter(c => c.length > 0);
+      } else if (/^\d{6,}$/.test(cleanStr)) {
+        for (let i = 0; i < cleanStr.length; i += 3) {
+          chunks.push(cleanStr.substring(i, i + 3));
+        }
+      } else {
+        chunks = [cleanStr];
+      }
+
+      let resultText = "";
+      for (let chunk of chunks) {
+        if (!chunk) continue;
+        const num = parseInt(chunk, 10);
+        if (!isNaN(num) && num >= 370 && num <= 480) {
+          resultText += String.fromCharCode(num - ASCII_OFFSET);
+        } else {
+          resultText += chunk;
+        }
+      }
+      return resultText;
+    }
+
+    /* -------------------------------------------------------------------------
+       2. PEMBEDAHAN NOMOR PESERTA (10 DIGIT)
+    ------------------------------------------------------------------------- */
+    function parseParticipantNumber(numberStr) {
+      if (!numberStr) return null;
+      const clean = numberStr.replace(/\D/g, '');
+      if (clean.length < 10) return null;
+
+      const pNum = clean.substring(0, 10);
+
+      const yy = pNum.substring(0, 2);
+      const mm = parseInt(pNum.substring(2, 4), 10);
+      const dd = parseInt(pNum.substring(4, 6), 10);
+      const tahunNum = parseInt("20" + yy, 10);
+      const namaBulan = (mm >= 1 && mm <= 12) ? NAMA_BULAN[mm] : `BULAN-${mm}`;
+      const shortDate = `${String(dd).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${tahunNum}`;
+
+      let namaHari = "";
+      let isToday = false;
+      try {
+        const dObj = new Date(tahunNum, mm - 1, dd);
+        if (!isNaN(dObj.getTime())) {
+          namaHari = NAMA_HARI[dObj.getDay()] + ", ";
+          const now = new Date();
+          isToday = (
+            now.getFullYear() === tahunNum &&
+            now.getMonth() === (mm - 1) &&
+            now.getDate() === dd
+          );
+        }
+      } catch (e) {}
+
+      const tglTes = `${namaHari}${dd} ${namaBulan} ${tahunNum}`;
+
+      const digit7 = pNum.charAt(6);
+      let ruang = "Lantai -";
+      let waktu = "-";
+      let lantai = "";
+      let sessionType = "";
+
+      switch(digit7) {
+        case '1':
+          ruang = "Lantai 2";
+          waktu = "PAGI (08.30)";
+          lantai = "Lantai 2";
+          sessionType = "pagi";
+          break;
+        case '2':
+          ruang = "Lantai 3";
+          waktu = "PAGI (08.30)";
+          lantai = "Lantai 3";
+          sessionType = "pagi";
+          break;
+        case '3':
+          ruang = "Lantai 2";
+          waktu = "SIANG (13.30)";
+          lantai = "Lantai 2";
+          sessionType = "siang";
+          break;
+        case '4':
+          ruang = "Lantai 3";
+          waktu = "SIANG (13.30)";
+          lantai = "Lantai 3";
+          sessionType = "siang";
+          break;
+        default:
+          ruang = `Lantai ${digit7}`;
+          waktu = "Khusus";
+          lantai = `Lantai ${digit7}`;
+          sessionType = "khusus";
+      }
+
+      let isTimeValid = true;
+      if (sessionType === "pagi" || sessionType === "siang") {
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        if (sessionType === "pagi") {
+          isTimeValid = (currentMinutes >= 420 && currentMinutes <= 540);
+        } else if (sessionType === "siang") {
+          isTimeValid = (currentMinutes >= 750 && currentMinutes <= 870);
+        }
+      }
+
+      const kursi = pNum.substring(8, 10);
+
+      return {
+        noPeserta: pNum,
+        tglTes: tglTes,
+        tglTesShort: shortDate,
+        isToday: isToday,
+        isTimeValid: isTimeValid,
+        ruang: ruang,
+        lantai: lantai,
+        waktu: waktu,
+        sessionType: sessionType,
+        kursi: kursi
+      };
+    }
+
+    /* -------------------------------------------------------------------------
+       3. PEMROSESAN QR & AUTO-SAVE
+    ------------------------------------------------------------------------- */
+    function processQRContent(rawText) {
+      let decodedFull = decodeSubstitutedNumbers(rawText);
+      if (!decodedFull) decodedFull = rawText;
+
+      let noPeserta = "";
+      let namaPeserta = "";
+
+      if (decodedFull.includes("-")) {
+        const parts = decodedFull.split("-");
+        if (parts.length >= 2) noPeserta = parts[1].trim();
+        if (parts.length >= 3) namaPeserta = parts.slice(2).join("-").trim();
+      } else {
+        const match = decodedFull.match(/\b\d{10}\b/);
+        if (match) noPeserta = match[0];
+      }
+
+      const parsedInfo = parseParticipantNumber(noPeserta);
+      const digitsOnly = (decodedFull.replace(/\D/g, '') || rawText.replace(/\D/g, ''));
+      let photoUrl = "";
+      if (digitsOnly.length >= 12) {
+        const first12Digits = digitsOnly.substring(0, 12);
+        photoUrl = `https://suliet.unsri.ac.id/usept/upload/foto_suliet/9999${first12Digits}.jpg`;
+      }
+
+      return {
+        raw: rawText,
+        decodedFull: decodedFull,
+        noPeserta: (parsedInfo ? parsedInfo.noPeserta : noPeserta) || "-",
+        nama: (namaPeserta || "PESERTA").toUpperCase(),
+        tglTes: parsedInfo ? parsedInfo.tglTes : "-",
+        tglTesShort: parsedInfo ? parsedInfo.tglTesShort : "-",
+        isToday: parsedInfo ? parsedInfo.isToday : false,
+        isTimeValid: parsedInfo ? parsedInfo.isTimeValid : true,
+        ruang: parsedInfo ? parsedInfo.ruang : "-",
+        lantai: parsedInfo ? parsedInfo.lantai : "",
+        waktu: parsedInfo ? parsedInfo.waktu : "-",
+        sessionType: parsedInfo ? parsedInfo.sessionType : "",
+        kursi: parsedInfo ? parsedInfo.kursi : "--",
+        photoUrl: photoUrl
+      };
+    }
+
+    function handleScanSuccess(rawText) {
+      const nowTs = Date.now();
+      if (rawText === lastScannedRaw && (nowTs - lastScannedTimestamp) < DUPLICATE_COOLDOWN_MS) {
+        return;
+      }
+      lastScannedRaw = rawText;
+      lastScannedTimestamp = nowTs;
+
+      playBeepSound();
+      const data = processQRContent(rawText);
+      currentParticipantData = data;
+
+      document.getElementById("val-no-peserta").innerText = data.noPeserta;
+      document.getElementById("val-nama").innerText = data.nama;
+      document.getElementById("val-tgl-tes").innerText = data.tglTes;
+      document.getElementById("val-waktu").innerText = data.waktu;
+      document.getElementById("val-no-kursi").innerText = data.kursi;
+      
+      if (data.ruang && data.ruang !== "-") {
+        const textRuang = data.ruang.toUpperCase();
+        document.getElementById("val-ruang-bawah-kursi").innerText = textRuang.startsWith("RUANG") 
+          ? textRuang 
+          : "RUANG " + textRuang;
+      } else {
+        document.getElementById("val-ruang-bawah-kursi").innerText = "RUANG";
+      }
+
+      const imgPhoto = document.getElementById("val-foto-peserta");
+      const placeholderPhoto = document.getElementById("val-foto-placeholder");
+      if (data.photoUrl) {
+        imgPhoto.src = data.photoUrl;
+        imgPhoto.classList.remove("hidden");
+        placeholderPhoto.classList.add("hidden");
+      } else {
+        imgPhoto.classList.add("hidden");
+        placeholderPhoto.classList.remove("hidden");
+      }
+
+      const boxTgl = document.getElementById("box-tgl-tes");
+      const badgeWarning = document.getElementById("badge-tgl-warning");
+      const lblTgl = document.getElementById("lbl-tgl-tes");
+      const valTgl = document.getElementById("val-tgl-tes");
+
+      const isDateAlert = (data.noPeserta !== "-" && !data.isToday);
+      if (isDateAlert) {
+        boxTgl.className = "col-span-8 bg-rose-50/90 p-2 sm:p-2.5 rounded-2xl border-2 border-rose-500 shadow-sm transition-colors duration-200 flex flex-col justify-center min-w-0 overflow-hidden";
+        lblTgl.className = "text-[8px] sm:text-[9px] font-bold text-rose-700 uppercase tracking-wider truncate";
+        valTgl.className = "text-[13px] sm:text-[15px] font-black text-rose-700 block mt-0.5 leading-snug truncate";
+        badgeWarning.classList.remove("hidden");
+      } else {
+        boxTgl.className = "col-span-8 bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 transition-colors duration-200 flex flex-col justify-center min-w-0 overflow-hidden";
+        lblTgl.className = "text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate";
+        valTgl.className = "text-[13px] sm:text-[15px] font-bold text-slate-800 block mt-0.5 leading-snug truncate";
+        badgeWarning.classList.add("hidden");
+      }
+
+      const boxWaktu = document.getElementById("box-waktu");
+      const badgeWaktuWarning = document.getElementById("badge-waktu-warning");
+      const lblWaktu = document.getElementById("lbl-waktu");
+      const valWaktu = document.getElementById("val-waktu");
+
+      const isTimeAlert = (data.noPeserta !== "-" && !data.isTimeValid);
+      if (isTimeAlert) {
+        boxWaktu.className = "col-span-4 bg-rose-50/90 p-2 sm:p-2.5 rounded-2xl border-2 border-rose-500 shadow-sm transition-colors duration-200 flex flex-col justify-center min-w-0 overflow-hidden";
+        lblWaktu.className = "text-[8px] sm:text-[9px] font-bold text-rose-700 uppercase tracking-wider truncate";
+        valWaktu.className = "text-xs sm:text-sm font-black text-rose-700 block mt-0.5 leading-snug truncate";
+        badgeWaktuWarning.classList.remove("hidden");
+      } else {
+        boxWaktu.className = "col-span-4 bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 transition-colors duration-200 flex flex-col justify-center min-w-0 overflow-hidden";
+        lblWaktu.className = "text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate";
+        valWaktu.className = "text-xs sm:text-sm font-bold text-slate-800 block mt-0.5 leading-snug truncate";
+        badgeWaktuWarning.classList.add("hidden");
+      }
+
+      const warningNoticeManual = document.getElementById("warning-notice-manual");
+      const btnSave = document.getElementById("btn-save-record");
+      const hasScheduleIssue = isDateAlert || isTimeAlert;
+      const isAlreadyRecorded = checkIsAlreadyRecorded(data.noPeserta);
+
+      if (isAlreadyRecorded) {
+        warningNoticeManual.classList.add("hidden");
+        btnSave.disabled = true;
+        showToast("Peserta (" + data.noPeserta + ") SUDAH PERNAH diverifikasi sebelumnya!", "warning");
+      } else if (hasScheduleIssue) {
+        btnSave.disabled = false;
+        warningNoticeManual.classList.remove("hidden");
+        showToast("Jadwal tidak sesuai! Auto-save dihentikan.", "warning");
+      } else {
+        warningNoticeManual.classList.add("hidden");
+        btnSave.disabled = true;
+        executeSave(false);
+      }
+    }
+
+    function checkIsAlreadyRecorded(noPeserta) {
+      if (!noPeserta || noPeserta === "-") return false;
+      const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+      return scanHistory.some(item => {
+        const itemNo = String(item.noPeserta || item.no_peserta || "").trim().replace(/\D/g, '');
+        return itemNo === cleanNo;
+      });
+    }
+
+    function playBeepSound() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+          sharedAudioCtx = new AudioContextClass();
+        }
+        if (sharedAudioCtx.state === "suspended") {
+          sharedAudioCtx.resume();
+        }
+        const osc = sharedAudioCtx.createOscillator();
+        const gain = sharedAudioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(sharedAudioCtx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
+        gain.gain.setValueAtTime(0.2, sharedAudioCtx.currentTime);
+        osc.start();
+        osc.stop(sharedAudioCtx.currentTime + 0.15);
+      } catch (e) {}
+    }
+
+    /* -------------------------------------------------------------------------
+       4. KONTROL KAMERA
+    ------------------------------------------------------------------------- */
+    async function loadAvailableCameras() {
+      try {
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras && cameras.length > 0) {
+          availableCameras = cameras;
+          const selectEl = document.getElementById("camera-select");
+          selectEl.innerHTML = "";
+
+          let preferredCamId = null;
+          cameras.forEach((cam, idx) => {
+            const labelLower = cam.label.toLowerCase();
+            const option = document.createElement("option");
+            option.value = cam.id;
+
+            let displayLabel = cam.label || `Kamera ${idx + 1}`;
+            const isWide = /wide|ultra|0\.5x|0\.6x|super/i.test(labelLower);
+            const isBack = /back|rear|belakang|environment/i.test(labelLower);
+
+            if (isWide) displayLabel += " (Ultra-Wide)";
+            else if (isBack) displayLabel += " (Kamera Utama 1x)";
+
+            option.text = displayLabel;
+            selectEl.appendChild(option);
+
+            if (!preferredCamId && isBack && !isWide) preferredCamId = cam.id;
+          });
+
+          if (!preferredCamId) {
+            const nonWide = cameras.find(c => !/wide|ultra|0\.5x|0\.6x/i.test(c.label.toLowerCase()));
+            preferredCamId = nonWide ? nonWide.id : cameras[0].id;
+          }
+
+          selectedCameraId = preferredCamId;
+          selectEl.value = preferredCamId;
+        }
+      } catch (e) {
+        console.warn("Tidak dapat membaca daftar kamera:", e);
+      }
+    }
+
+    function toggleCameraSettings() {
+      document.getElementById("cam-settings-panel").classList.toggle("hidden");
+    }
+
+    async function changeCamera(cameraId) {
+      selectedCameraId = cameraId;
+      if (html5QrCode && html5QrCode.isScanning) {
+        await stopScanner();
+        startScanner();
+      }
+    }
+
+    function checkZoomCapabilities() {
+      const zoomContainer = document.getElementById("zoom-control-container");
+      if (zoomContainer) zoomContainer.classList.add("hidden");
+      activeMediaTrack = null;
+      zoomCapabilities = null;
+
+      try {
+        const videoEl = document.querySelector("#reader video");
+        if (videoEl && videoEl.srcObject) {
+          const track = videoEl.srcObject.getVideoTracks()[0];
+          if (track) {
+            activeMediaTrack = track;
+            const capabilities = track.getCapabilities ? track.getCapabilities() : null;
+            if (capabilities && capabilities.zoom) {
+              zoomCapabilities = capabilities.zoom;
+              const slider = document.getElementById("zoom-slider");
+              slider.min = zoomCapabilities.min || 1;
+              slider.max = Math.min(zoomCapabilities.max || 3, 4);
+              slider.step = zoomCapabilities.step || 0.1;
+              slider.value = 1;
+              if (zoomContainer) zoomContainer.classList.remove("hidden");
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Fitur zoom tidak didukung:", err);
+      }
+    }
+
+    function applyZoom(zoomLevel) {
+      if (activeMediaTrack && zoomCapabilities) {
+        try {
+          activeMediaTrack.applyConstraints({ advanced: [{ zoom: parseFloat(zoomLevel) }] });
+        } catch (e) {
+          console.warn("Gagal menerapkan zoom:", e);
+        }
+      }
+    }
+
+    function setZoomLevel(level) {
+      const slider = document.getElementById("zoom-slider");
+      slider.value = level;
+      applyZoom(level);
+    }
+
+    function startScanner() {
+      if (html5QrCode && html5QrCode.isScanning) return;
+      const placeholder = document.getElementById("camera-placeholder");
+      if (placeholder) placeholder.style.display = "none";
+
+      html5QrCode = new Html5Qrcode("reader");
+
+      const cameraConfig = selectedCameraId 
+        ? { deviceId: { exact: selectedCameraId } }
+        : { facingMode: "environment" };
+
+      const readerEl = document.getElementById("reader");
+      const boxSize = readerEl ? Math.min(readerEl.clientWidth, readerEl.clientHeight) - 16 : 220;
+
+      html5QrCode.start(
+        cameraConfig,
+        { 
+          fps: 15, 
+          qrbox: { width: boxSize, height: boxSize },
+          aspectRatio: 1.0
+        },
+        (decodedText) => handleScanSuccess(decodedText),
+        (err) => {}
+      ).then(() => {
+        document.getElementById("btn-start-camera").disabled = true;
+        document.getElementById("btn-stop-camera").disabled = false;
+        setTimeout(checkZoomCapabilities, 600);
+      }).catch((err) => {
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { 
+            fps: 15, 
+            qrbox: { width: boxSize, height: boxSize },
+            aspectRatio: 1.0
+          },
+          (decodedText) => handleScanSuccess(decodedText),
+          (err) => {}
+        ).then(() => {
+          document.getElementById("btn-start-camera").disabled = true;
+          document.getElementById("btn-stop-camera").disabled = false;
+          setTimeout(checkZoomCapabilities, 600);
+        }).catch((fallbackErr) => {
+          showToast("Izin kamera ditolak atau kamera tidak ditemukan.", "error");
+          if (placeholder) placeholder.style.display = "block";
+        });
+      });
+    }
+
+    function stopScanner() {
+      if (html5QrCode) {
+        return html5QrCode.stop().then(() => {
+          document.getElementById("btn-start-camera").disabled = false;
+          document.getElementById("btn-stop-camera").disabled = true;
+          const placeholder = document.getElementById("camera-placeholder");
+          if (placeholder) placeholder.style.display = "block";
+          document.getElementById("zoom-control-container").classList.add("hidden");
+          activeMediaTrack = null;
+        }).catch(err => console.error(err));
+      }
+    }
+
+    function clearScanDisplay() {
+      currentParticipantData = null;
+      lastScannedRaw = "";
+      lastScannedTimestamp = 0;
+
+      document.getElementById("val-no-peserta").innerText = "-";
+      document.getElementById("val-nama").innerText = "-";
+      document.getElementById("val-tgl-tes").innerText = "-";
+      document.getElementById("val-waktu").innerText = "-";
+      document.getElementById("val-no-kursi").innerText = "--";
+      document.getElementById("val-ruang-bawah-kursi").innerText = "RUANG";
+
+      const imgPhoto = document.getElementById("val-foto-peserta");
+      const placeholderPhoto = document.getElementById("val-foto-placeholder");
+      if (imgPhoto) {
+        imgPhoto.src = "";
+        imgPhoto.classList.add("hidden");
+      }
+      if (placeholderPhoto) placeholderPhoto.classList.remove("hidden");
+
+      const boxTgl = document.getElementById("box-tgl-tes");
+      const badgeTgl = document.getElementById("badge-tgl-warning");
+      const lblTgl = document.getElementById("lbl-tgl-tes");
+      const valTgl = document.getElementById("val-tgl-tes");
+      if (boxTgl) boxTgl.className = "col-span-8 bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 transition-colors duration-200 flex flex-col justify-center min-w-0";
+      if (lblTgl) lblTgl.className = "text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider";
+      if (valTgl) valTgl.className = "text-[13px] sm:text-[15px] font-bold text-slate-800 block mt-0.5 leading-snug truncate";
+      if (badgeTgl) badgeTgl.classList.add("hidden");
+
+      const boxWaktu = document.getElementById("box-waktu");
+      const badgeWaktu = document.getElementById("badge-waktu-warning");
+      const lblWaktu = document.getElementById("lbl-waktu");
+      const valWaktu = document.getElementById("val-waktu");
+      if (boxWaktu) boxWaktu.className = "col-span-4 bg-slate-50/90 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 flex flex-col justify-center transition-colors duration-200 min-w-0";
+      if (lblWaktu) lblWaktu.className = "text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider";
+      if (valWaktu) valWaktu.className = "text-xs sm:text-sm font-bold text-slate-800 block mt-0.5 leading-snug truncate";
+      if (badgeWaktu) badgeWaktu.classList.add("hidden");
+
+      const scanNote = document.getElementById("scan-note");
+      if (scanNote) scanNote.value = "";
+      const btnSave = document.getElementById("btn-save-record");
+      if (btnSave) btnSave.disabled = true;
+      const warningNotice = document.getElementById("warning-notice-manual");
+      if (warningNotice) warningNotice.classList.add("hidden");
+    }
+
+    function resetDisplayOnly() {
+      clearScanDisplay();
+      showToast("Tampilan hasil scan telah dibersihkan", "success");
+    }
+
+    /* -------------------------------------------------------------------------
+       5. SIMPAN KE DATABASE (SUPABASE / PREVIEW)
+    ------------------------------------------------------------------------- */
+    function saveCurrentRecord(isManual = false) {
+      executeSave(isManual);
+    }
+
+    async function executeSave(isManual = false) {
+      if (!currentParticipantData || currentParticipantData.noPeserta === "-") return;
+      
+      if (checkIsAlreadyRecorded(currentParticipantData.noPeserta)) {
+        showToast("Data peserta ini sudah tersimpan, tidak disimpan ulang.", "warning");
+        document.getElementById("btn-save-record").disabled = true;
+        document.getElementById("warning-notice-manual").classList.add("hidden");
+        return;
+      }
+
+      const now = new Date();
+      const timestamp = now.getFullYear() + "-" + 
+                        String(now.getMonth()+1).padStart(2,'0') + "-" + 
+                        String(now.getDate()).padStart(2,'0') + " " + 
+                        String(now.getHours()).padStart(2,'0') + ":" + 
+                        String(now.getMinutes()).padStart(2,'0') + ":" + 
+                        String(now.getSeconds()).padStart(2,'0');
+
+      let customNote = document.getElementById("scan-note").value.trim();
+      if (!customNote) {
+        customNote = isManual ? "Disetujui Manual" : "Auto-Save Valid";
+      }
+
+      const record = {
+        noUrut: scanHistory.length + 1,
+        timestamp: timestamp,
+        noPeserta: currentParticipantData.noPeserta,
+        nama: currentParticipantData.nama,
+        tglTes: currentParticipantData.tglTes,
+        tglTesShort: currentParticipantData.tglTesShort || currentParticipantData.tglTes,
+        ruang: currentParticipantData.ruang,
+        waktu: currentParticipantData.waktu,
+        sessionType: currentParticipantData.sessionType,
+        kursi: currentParticipantData.kursi,
+        note: customNote,
+        photoUrl: currentParticipantData.photoUrl || ""
+      };
+
+      if (IS_PREVIEW || !supabaseClient) {
+        scanHistory.unshift(record);
+        saveLocalHistory();
+        renderHistoryTable();
+        showToast(isManual ? "Tersimpan manual ke kehadiran (Lokal)." : "Tersimpan otomatis ke memori lokal!", "success");
+        
+        document.getElementById("scan-note").value = "";
+        document.getElementById("btn-save-record").disabled = true;
+        document.getElementById("warning-notice-manual").classList.add("hidden");
+      } else {
+        const payload = {
+          no_peserta: record.noPeserta,
+          nama: record.nama,
+          tgl_tes: record.tglTes,
+          ruang: record.ruang,
+          waktu: record.waktu,
+          kursi: record.kursi,
+          note: customNote,
+          raw_code: currentParticipantData.raw,
+          photo_url: record.photoUrl
+        };
+
+        if (!navigator.onLine) {
+          queueOfflineRecord(record, payload);
+          return;
+        }
+
+        const btn = document.getElementById("btn-save-record");
+        const originalText = document.getElementById("lbl-save-button").innerText;
+        btn.disabled = true;
+        document.getElementById("lbl-save-button").innerText = "Menyimpan ke Supabase...";
+
+        try {
+          const { data, error } = await supabaseClient
+            .from('attendance_logs')
+            .insert([payload])
+            .select('id, scanned_at, no_peserta, nama, tgl_tes, ruang, waktu, kursi, note, photo_url');
+
+          document.getElementById("lbl-save-button").innerText = originalText;
+
+          if (error) {
+            // Handle error duplicate key constraint postgres
+            if (error.code === '23505') {
+              btn.disabled = true;
+              showToast("Peserta sudah ada di database Supabase (duplikasi dicegah).", "warning");
+              document.getElementById("scan-note").value = "";
+              document.getElementById("warning-notice-manual").classList.add("hidden");
+              refreshData(true);
+            } else {
+              btn.disabled = false;
+              showToast("Gagal simpan ke Supabase: " + error.message, "error");
+            }
+          } else {
+            btn.disabled = true;
+            const savedRow = (data && data[0]) ? {
+              noUrut: scanHistory.length + 1,
+              id: data[0].id,
+              timestamp: data[0].scanned_at || record.timestamp,
+              noPeserta: data[0].no_peserta || record.noPeserta,
+              nama: data[0].nama || record.nama,
+              tglTes: data[0].tgl_tes || record.tglTes,
+              tglTesShort: record.tglTesShort,
+              ruang: data[0].ruang || record.ruang,
+              waktu: data[0].waktu || record.waktu,
+              sessionType: record.sessionType,
+              kursi: data[0].kursi || record.kursi,
+              note: data[0].note || record.note,
+              photoUrl: data[0].photo_url || record.photoUrl
+            } : record;
+
+            scanHistory.unshift(savedRow);
+            scanHistory.forEach((item, idx) => { item.noUrut = scanHistory.length - idx; });
+            saveLocalHistory();
+            renderHistoryTable();
+
+            showToast("Berhasil tersimpan di database!", "success");
+            document.getElementById("scan-note").value = "";
+            document.getElementById("warning-notice-manual").classList.add("hidden");
+
+            if (pendingQueue.length > 0) {
+              syncPendingQueue(true);
+            }
+          }
+        } catch (err) {
+          document.getElementById("lbl-save-button").innerText = originalText;
+          queueOfflineRecord(record, payload);
+        }
+      }
+    }
+
+    function queueOfflineRecord(record, payload) {
+      pendingQueue.push({ record, payload, queuedAt: Date.now() });
+      savePendingQueue();
+
+      scanHistory.unshift({ ...record, isPending: true });
+      scanHistory.forEach((item, idx) => { item.noUrut = scanHistory.length - idx; });
+      saveLocalHistory();
+      renderHistoryTable();
+
+      document.getElementById("scan-note").value = "";
+      document.getElementById("btn-save-record").disabled = true;
+      document.getElementById("warning-notice-manual").classList.add("hidden");
+      showToast("Jaringan terputus! Data disimpan di antrean offline.", "warning");
+    }
+
+    async function syncPendingQueue(silent = false) {
+      if (isSyncingQueue || IS_PREVIEW || !supabaseClient || !navigator.onLine) {
+        if (!silent && !navigator.onLine) {
+          showToast("Perangkat masih offline, belum dapat sinkronisasi.", "warning");
+        }
+        return;
+      }
+      if (pendingQueue.length === 0) return;
+
+      isSyncingQueue = true;
+      let syncedCount = 0;
+      const remaining = [];
+
+      for (const item of pendingQueue) {
+        try {
+          const { error } = await supabaseClient
+            .from('attendance_logs')
+            .insert([item.payload]);
+
+          if (!error || error.code === '23505') {
+            syncedCount++;
+            const cleanNo = String(item.record.noPeserta || "").trim().replace(/\D/g, '');
+            scanHistory.forEach(h => {
+              const hNo = String(h.noPeserta || h.no_peserta || "").trim().replace(/\D/g, '');
+              if (hNo === cleanNo) delete h.isPending;
+            });
+          } else {
+            remaining.push(item);
+          }
+        } catch (e) {
+          remaining.push(item);
+        }
+      }
+
+      pendingQueue = remaining;
+      savePendingQueue();
+      saveLocalHistory();
+      renderHistoryTable();
+      isSyncingQueue = false;
+
+      if (syncedCount > 0) {
+        showToast(`${syncedCount} data antrean offline berhasil disinkronkan!`, "success");
+      } else if (!silent && remaining.length > 0) {
+        showToast("Sebagian data antrean gagal disinkronkan.", "error");
+      }
+    }
+
+    /* -------------------------------------------------------------------------
+       6. LOGIKA SESI SAAT INI & FILTER TANGGAL & SESI AKTIF
+    ------------------------------------------------------------------------- */
+    function getCurrentActiveSession() {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      if (currentMinutes >= 360 && currentMinutes < 720) {
+        return { key: "pagi", label: "SESI PAGI" };
+      } else if (currentMinutes >= 720 && currentMinutes <= 1080) {
+        return { key: "siang", label: "SESI SIANG" };
+      } else if (currentMinutes < 360) {
+        return { key: "pagi", label: "SESI PAGI" };
+      } else {
+        return { key: "siang", label: "SESI SIANG" };
+      }
+    }
+
+    function isItemSameAsToday(item) {
+      const now = new Date();
+      const todayYear = now.getFullYear();
+      const todayMonth = now.getMonth() + 1;
+      const todayDate = now.getDate();
+
+      const strYMD = `${todayYear}-${String(todayMonth).padStart(2, '0')}-${String(todayDate).padStart(2, '0')}`;
+      const strDMY = `${String(todayDate).padStart(2, '0')}/${String(todayMonth).padStart(2, '0')}/${todayYear}`;
+      const strYYMMDD = `${String(todayYear).slice(-2)}${String(todayMonth).padStart(2, '0')}${String(todayDate).padStart(2, '0')}`;
+
+      const noPeserta = item.noPeserta || item.no_peserta || "";
+      const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+      if (cleanNo.length >= 6 && cleanNo.startsWith(strYYMMDD)) {
+        return true;
+      }
+
+      const tglStr = String(item.tglTesShort || item.tgl_tes || item.tglTes || "").trim();
+      if (tglStr && tglStr !== "-") {
+        if (tglStr.includes(strDMY) || tglStr.includes(strYMD)) return true;
+
+        const matchDMY = tglStr.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+        if (matchDMY) {
+          const d = parseInt(matchDMY[1], 10);
+          const m = parseInt(matchDMY[2], 10);
+          let y = parseInt(matchDMY[3], 10);
+          if (y < 100) y += 2000;
+          if (d === todayDate && m === todayMonth && y === todayYear) return true;
+        }
+
+        const namaBulanIni = NAMA_BULAN[todayMonth];
+        if (namaBulanIni && tglStr.toUpperCase().includes(namaBulanIni)) {
+          const regexDate = new RegExp(`(^|[^0-9])${todayDate}([^0-9]|$)`);
+          if (regexDate.test(tglStr)) return true;
+        }
+      }
+      return false;
+    }
+
+    function getItemSessionType(item) {
+      if (item.sessionType) {
+        const st = String(item.sessionType).toLowerCase();
+        if (st.includes("pagi")) return "pagi";
+        if (st.includes("siang")) return "siang";
+      }
+
+      const waktuStr = String(item.waktu || "").toUpperCase();
+      if (waktuStr.includes("PAGI") || waktuStr.includes("08.30") || waktuStr.includes("08:30")) return "pagi";
+      if (waktuStr.includes("SIANG") || waktuStr.includes("13.30") || waktuStr.includes("13:30")) return "siang";
+
+      const noPeserta = item.noPeserta || item.no_peserta || "";
+      const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+      if (cleanNo.length >= 7) {
+        const d7 = cleanNo.charAt(6);
+        if (d7 === '1' || d7 === '2') return "pagi";
+        if (d7 === '3' || d7 === '4') return "siang";
+      }
+      return "";
+    }
+
+    function getParticipantDateAndSession(item) {
+      const isToday = isItemSameAsToday(item);
+      const sessionType = getItemSessionType(item);
+      return { isToday, sessionType };
+    }
+
+    /* -------------------------------------------------------------------------
+       7. TABEL RIWAYAT, PENCARIAN & STATISTIK JUMLAH
+    ------------------------------------------------------------------------- */
+    function formatTimeOnly(ts) {
+      if (!ts || ts === "-") return "-";
+      if (ts.includes("T")) {
+        const dateObj = new Date(ts);
+        if (!isNaN(dateObj.getTime())) {
+          return dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+      }
+      const parts = String(ts).trim().split(" ");
+      if (parts.length >= 2) return parts[1];
+      return ts;
+    }
+
+    function formatShortDate(fullTgl, noPeserta) {
+      if (!fullTgl || fullTgl === "-") return "-";
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(fullTgl)) return fullTgl;
+      if (noPeserta && noPeserta.length >= 6) {
+        const clean = noPeserta.replace(/\D/g, '');
+        if (clean.length >= 6) {
+          const yy = clean.substring(0, 2);
+          const mm = clean.substring(2, 4);
+          const dd = clean.substring(4, 6);
+          return `${dd}/${mm}/20${yy}`;
+        }
+      }
+      if (fullTgl.includes(",")) return fullTgl.split(",")[1].trim();
+      return fullTgl;
+    }
+
+    function formatRuangSesiCompact(ruang, waktu, noPeserta = "") {
+      let lt = "";
+      const ruangStr = String(ruang || "").toUpperCase();
+
+      if (ruangStr.includes("2") || ruangStr.includes("LT. 2") || ruangStr.includes("LT.2") || ruangStr.includes("LANTAI 2") || ruangStr.includes("LT 2")) {
+        lt = "LT 2";
+      } else if (ruangStr.includes("3") || ruangStr.includes("LT. 3") || ruangStr.includes("LT.3") || ruangStr.includes("LANTAI 3") || ruangStr.includes("LT 3")) {
+        lt = "LT 3";
+      }
+
+      if (!lt && noPeserta) {
+        const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+        if (cleanNo.length >= 7) {
+          const d7 = cleanNo.charAt(6);
+          if (d7 === '1' || d7 === '3') lt = "LT 2";
+          else if (d7 === '2' || d7 === '4') lt = "LT 3";
+          else lt = `LT ${d7}`;
+        }
+      }
+      if (!lt) lt = "LT -";
+
+      let sesi = "";
+      const waktuStr = String(waktu || "").toUpperCase();
+      if (waktuStr.includes("PAGI") || waktuStr.includes("08.30") || waktuStr.includes("08:30")) {
+        sesi = "Pagi";
+      } else if (waktuStr.includes("SIANG") || waktuStr.includes("13.30") || waktuStr.includes("13:30")) {
+        sesi = "Siang";
+      } else {
+        if (noPeserta) {
+          const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+          if (cleanNo.length >= 7) {
+            const d7 = cleanNo.charAt(6);
+            if (d7 === '1' || d7 === '2') sesi = "Pagi";
+            else if (d7 === '3' || d7 === '4') sesi = "Siang";
+          }
+        }
+        if (!sesi) sesi = waktuStr || "-";
+      }
+      return `${lt} ${sesi}`.trim();
+    }
+
+    function updateLocationCounters() {
+      const activeSession = getCurrentActiveSession();
+      let lt2CurrentSessionCount = 0;
+      let lt3CurrentSessionCount = 0;
+
+      const now = new Date();
+      const hariTeks = NAMA_HARI[now.getDay()];
+      const tglTeks = `${String(now.getDate()).padStart(2, '0')} ${NAMA_BULAN[now.getMonth() + 1]} ${now.getFullYear()}`;
+      const elInfoTgl = document.getElementById("stat-info-tgl");
+      const elInfoSesi = document.getElementById("stat-info-sesi");
+
+      if (elInfoTgl) elInfoTgl.innerText = `${hariTeks}, ${tglTeks}`;
+      if (elInfoSesi) elInfoSesi.innerText = activeSession.label;
+
+      scanHistory.forEach(item => {
+        const info = getParticipantDateAndSession(item);
+        if (info.isToday && info.sessionType === activeSession.key) {
+          let isLt2 = false;
+          let isLt3 = false;
+          const noPeserta = item.noPeserta || item.no_peserta || "";
+          const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+          if (cleanNo.length >= 7) {
+            const d7 = cleanNo.charAt(6);
+            if (d7 === '1' || d7 === '3') isLt2 = true;
+            if (d7 === '2' || d7 === '4') isLt3 = true;
+          }
+          if (!isLt2 && !isLt3) {
+            const ruangText = String(item.ruang || "").toUpperCase();
+            if (ruangText.includes("2") || ruangText.includes("LANTAI 2") || ruangText.includes("LT 2")) isLt2 = true;
+            else if (ruangText.includes("3") || ruangText.includes("LANTAI 3") || ruangText.includes("LT 3")) isLt3 = true;
+          }
+
+          if (isLt2) lt2CurrentSessionCount++;
+          if (isLt3) lt3CurrentSessionCount++;
+        }
+      });
+
+      const totalCurrentSession = lt2CurrentSessionCount + lt3CurrentSessionCount;
+
+      const elLt2 = document.getElementById("count-lt2");
+      const elLt3 = document.getElementById("count-lt3");
+      if (elLt2) elLt2.innerText = lt2CurrentSessionCount;
+      if (elLt3) elLt3.innerText = lt3CurrentSessionCount;
+
+      const statTotal = document.getElementById("stat-total-session");
+      const statLt2 = document.getElementById("stat-lt2-session");
+      const statLt3 = document.getElementById("stat-lt3-session");
+
+      if (statTotal) statTotal.innerText = totalCurrentSession;
+      if (statLt2) statLt2.innerText = lt2CurrentSessionCount;
+      if (statLt3) statLt3.innerText = lt3CurrentSessionCount;
+    }
+
+    function renderHistoryTable(dataList = scanHistory) {
+      const tbody = document.getElementById("history-table-body");
+      updateLocationCounters();
+      tbody.innerHTML = "";
+
+      if (dataList.length === 0) {
+        const emptyTr = document.createElement("tr");
+        const emptyTd = document.createElement("td");
+        emptyTd.colSpan = 8;
+        emptyTd.className = "py-6 text-center text-slate-400";
+        emptyTd.textContent = "Belum ada data scan.";
+        emptyTr.appendChild(emptyTd);
+        tbody.appendChild(emptyTr);
+        return;
+      }
+
+      dataList.forEach((item, index) => {
+        const noTampil = item.noUrut || (scanHistory.length - index);
+        const timeField = item.timestamp || item.scanned_at || "-";
+        const jamSaja = formatTimeOnly(timeField);
+        const noPeserta = item.noPeserta || item.no_peserta || "-";
+        const nama = item.nama || "-";
+        const tglTes = item.tglTes || item.tgl_tes || "-";
+        const ruang = item.ruang || "-";
+        const waktu = item.waktu || "-";
+        const kursi = item.kursi || "--";
+        const note = item.note || "-";
+
+        const tglRingkas = item.tglTesShort || formatShortDate(tglTes, noPeserta);
+        const ruangSesiRingkas = formatRuangSesiCompact(ruang, waktu, noPeserta);
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-emerald-50/40 transition border-b border-slate-100 text-[11px]";
+
+        const createCell = (className, text) => {
+          const td = document.createElement("td");
+          td.className = className;
+          td.textContent = text;
+          return td;
+        };
+
+        tr.appendChild(createCell("py-2.5 px-2.5 text-center font-bold text-slate-500", String(noTampil)));
+        tr.appendChild(createCell("py-2.5 px-3 text-slate-500 whitespace-nowrap font-mono font-bold", jamSaja));
+        tr.appendChild(createCell("py-2.5 px-3 font-mono font-bold text-emerald-900", noPeserta));
+        tr.appendChild(createCell("py-2.5 px-3 font-semibold text-slate-800", nama));
+        tr.appendChild(createCell("py-2.5 px-3 text-slate-600 whitespace-nowrap font-medium", tglRingkas));
+
+        const tdRuang = document.createElement("td");
+        tdRuang.className = "py-2.5 px-3 text-emerald-900 font-bold whitespace-nowrap";
+        const badgeRuang = document.createElement("span");
+        badgeRuang.className = "px-1.5 py-0.5 rounded bg-emerald-100/70 text-emerald-800";
+        badgeRuang.textContent = ruangSesiRingkas;
+        tdRuang.appendChild(badgeRuang);
+        tr.appendChild(tdRuang);
+
+        tr.appendChild(createCell("py-2.5 px-3 text-center font-mono font-black text-emerald-700 bg-emerald-50/50", kursi));
+
+        const tdNote = document.createElement("td");
+        tdNote.className = "py-2.5 px-3 text-slate-500";
+        if (item.isPending) {
+          const pendingBadge = document.createElement("span");
+          pendingBadge.className = "inline-block mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase";
+          pendingBadge.textContent = "Offline";
+          tdNote.appendChild(pendingBadge);
+        }
+        tdNote.appendChild(document.createTextNode(note));
+        tr.appendChild(tdNote);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterHistoryTable() {
+      const query = document.getElementById("history-search").value.toLowerCase();
+      const filtered = scanHistory.filter(item => {
+        const noP = (item.noPeserta || item.no_peserta || "").toLowerCase();
+        const nm = (item.nama || "").toLowerCase();
+        const nt = (item.note || "").toLowerCase();
+        return noP.includes(query) || nm.includes(query) || nt.includes(query);
+      });
+      renderHistoryTable(filtered);
+    }
+
+    async function refreshData(silent = false) {
+      if (IS_PREVIEW || !supabaseClient) {
+        renderHistoryTable();
+        return;
+      }
+
+      if (pendingQueue.length > 0 && navigator.onLine) {
+        await syncPendingQueue(true);
+      }
+
+      const tbody = document.getElementById("history-table-body");
+      if (!silent && tbody && scanHistory.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-emerald-700"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Memuat data dari Supabase...</td></tr>`;
+      }
+
+      try {
+        const PAGE_SIZE = 1000;
+        const MAX_PAGES = 5;
+        let allRows = [];
+
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const from = page * PAGE_SIZE;
+          const to = from + PAGE_SIZE - 1;
+          const { data, error } = await supabaseClient
+            .from('attendance_logs')
+            .select('id, scanned_at, no_peserta, nama, tgl_tes, ruang, waktu, kursi, note, photo_url')
+            .order('scanned_at', { ascending: false })
+            .range(from, to);
+
+          if (error) {
+            console.error("Supabase fetch error:", error);
+            if (!silent) showToast("Gagal mengambil data Supabase: " + error.message, "error");
+            renderHistoryTable();
+            return;
+          }
+
+          if (data && data.length > 0) {
+            allRows = allRows.concat(data);
+          }
+          if (!data || data.length < PAGE_SIZE) break;
+        }
+
+        scanHistory = allRows.map((row, idx) => ({
+          noUrut: allRows.length - idx,
+          id: row.id,
+          timestamp: row.scanned_at,
+          noPeserta: row.no_peserta,
+          nama: row.nama,
+          tglTes: row.tgl_tes,
+          ruang: row.ruang,
+          waktu: row.waktu,
+          kursi: row.kursi,
+          note: row.note,
+          photoUrl: row.photo_url
+        }));
+
+        mergePendingIntoHistory();
+        scanHistory.forEach((item, idx) => { item.noUrut = scanHistory.length - idx; });
+        saveLocalHistory();
+        updateDatabaseBadge("online", "Supabase Cloud Terhubung");
+        renderHistoryTable();
+      } catch (err) {
+        console.warn("Kesalahan koneksi Supabase:", err);
+        updateDatabaseBadge("preview", "Offline (Cache Lokal)");
+        renderHistoryTable();
+      }
+    }
+
+    function escapeCSVField(value) {
+      const str = String(value ?? "-").replace(/"/g, '""');
+      return `"${str}"`;
+    }
+
+    function exportCSV() {
+      if (scanHistory.length === 0) {
+        showToast("Tidak ada data untuk diekspor.", "warning");
+        return;
+      }
+      const rows = ["No.,Waktu Verifikasi,No Peserta,Nama Peserta,Tgl Tes,Ruang,Waktu Ujian,Kursi,Catatan"];
+      scanHistory.forEach((r, idx) => {
+        const noVal = r.noUrut || (idx + 1);
+        const timeVal = r.timestamp || r.scanned_at || "-";
+        const noP = r.noPeserta || r.no_peserta || "-";
+        const nm = r.nama || "-";
+        const tgl = r.tglTes || r.tgl_tes || "-";
+        const rng = r.ruang || "-";
+        const wkt = r.waktu || "-";
+        const krs = r.kursi || "-";
+        const nt = r.note || "-";
+        rows.push([noVal, timeVal, noP, nm, tgl, rng, wkt, krs, nt].map(escapeCSVField).join(","));
+      });
+      const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `kehadiran_supabase_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function switchTab(tabName) {
+      ['scanner', 'history'].forEach(t => {
+        document.getElementById(`section-${t}`).classList.add('hidden');
+      });
+
+      const btnScanner = document.getElementById('tab-btn-scanner');
+      const btnHistory = document.getElementById('tab-btn-history');
+      const counterBox = document.getElementById('counter-box');
+
+      if (tabName === 'scanner') {
+        document.getElementById('section-scanner').classList.remove('hidden');
+        btnScanner.className = "col-span-8 flex items-center justify-center py-2.5 px-3 rounded-xl bg-emerald-800 text-white shadow-sm transition active:scale-95";
+        btnHistory.className = "col-span-6 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-slate-600 hover:text-emerald-800 hover:bg-emerald-50/60 transition active:scale-95 border border-transparent";
+        if (counterBox) {
+          counterBox.className = "flex flex-col text-left font-mono text-[9px] sm:text-[10px] leading-tight font-extrabold px-1.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60";
+        }
+      } else {
+        document.getElementById('section-history').classList.remove('hidden');
+        btnHistory.className = "col-span-6 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-emerald-800 text-white shadow-sm transition active:scale-95 border border-emerald-700";
+        btnScanner.className = "col-span-8 flex items-center justify-center py-2.5 px-3 rounded-xl text-slate-600 hover:text-emerald-800 hover:bg-emerald-50/60 transition active:scale-95";
+        if (counterBox) {
+          counterBox.className = "flex flex-col text-left font-mono text-[9px] sm:text-[10px] leading-tight font-extrabold px-1.5 py-0.5 rounded-lg bg-emerald-900/40 text-emerald-100 border border-emerald-600/50";
+        }
+        renderHistoryTable();
+      }
+    }
+
+    /* -------------------------------------------------------------------------
+       8. MODAL KONFIGURASI SUPABASE
+    ------------------------------------------------------------------------- */
+    function toggleConfigModal(show) {
+      const modal = document.getElementById("config-modal");
+      if (show) {
+        document.getElementById("cfg-supabase-url").value = SUPABASE_URL.includes("your-project") ? "" : SUPABASE_URL;
+        document.getElementById("cfg-supabase-key").value = SUPABASE_ANON_KEY.includes("your-anon") ? "" : SUPABASE_ANON_KEY;
+        document.getElementById("cfg-preview-mode").checked = IS_PREVIEW;
+        modal.classList.remove("hidden");
+      } else {
+        modal.classList.add("hidden");
+      }
+    }
+
+    function saveSupabaseSettings() {
+      const urlInput = document.getElementById("cfg-supabase-url").value.trim();
+      const keyInput = document.getElementById("cfg-supabase-key").value.trim();
+      const isPreview = document.getElementById("cfg-preview-mode").checked;
+
+      SUPABASE_URL = urlInput || "https://your-project-id.supabase.co";
+      SUPABASE_ANON_KEY = keyInput || "your-anon-key";
+      IS_PREVIEW = isPreview;
+
+      localStorage.setItem(STORAGE_KEY_URL, SUPABASE_URL);
+      localStorage.setItem(STORAGE_KEY_KEY, SUPABASE_ANON_KEY);
+      localStorage.setItem(STORAGE_KEY_PREVIEW, isPreview ? "true" : "false");
+
+      initSupabase();
+      toggleConfigModal(false);
+      showToast("Pengaturan Supabase disimpan!", "success");
+      refreshData(false);
+    }
+
+    function resetSupabaseSettings() {
+      localStorage.removeItem(STORAGE_KEY_URL);
+      localStorage.removeItem(STORAGE_KEY_KEY);
+      localStorage.removeItem(STORAGE_KEY_PREVIEW);
+
+      SUPABASE_URL = DEFAULT_SUPABASE_URL;
+      SUPABASE_ANON_KEY = DEFAULT_SUPABASE_ANON_KEY;
+      IS_PREVIEW = false;
+
+      initSupabase();
+      toggleConfigModal(false);
+      showToast("Pengaturan dikembalikan ke bawaan!", "success");
+      refreshData(false);
+    }
+
+    async function testSupabaseConnection() {
+      const urlInput = document.getElementById("cfg-supabase-url").value.trim();
+      const keyInput = document.getElementById("cfg-supabase-key").value.trim();
+
+      if (!urlInput || !keyInput) {
+        showToast("Isi URL dan Anon Key terlebih dahulu.", "warning");
+        return;
+      }
+
+      try {
+        const testClient = window.supabase.createClient(urlInput, keyInput);
+        const { data, error } = await testClient.from('attendance_logs').select('count', { count: 'exact', head: true });
+        
+        if (error) {
+          showToast("Koneksi gagal: " + error.message, "error");
+        } else {
+          showToast("Koneksi Supabase Sukses!", "success");
+        }
+      } catch (e) {
+        showToast("Error tes koneksi: " + e.message, "error");
+      }
+    }
+
+    function copySQLSchema() {
+      const sqlText = document.getElementById("sql-schema-code").innerText;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(sqlText)
+          .then(() => showToast("Kode SQL disalin ke clipboard!", "success"))
+          .catch(() => fallbackCopyText(sqlText));
+      } else {
+        fallbackCopyText(sqlText);
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const dummy = document.createElement("textarea");
+      document.body.appendChild(dummy);
+      dummy.value = text;
+      dummy.select();
+      document.execCommand("copy");
+      document.body.removeChild(dummy);
+      showToast("Kode SQL disalin ke clipboard!", "success");
+    }
+
+    /* -------------------------------------------------------------------------
+       9. PWA INSTALL & SERVICE WORKER
+    ------------------------------------------------------------------------- */
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const btnInstall = document.getElementById("btn-install-pwa");
+      if (btnInstall) btnInstall.classList.remove("hidden");
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      const btnInstall = document.getElementById("btn-install-pwa");
+      if (btnInstall) btnInstall.classList.add("hidden");
+      showToast("Aplikasi berhasil dipasang di perangkat!", "success");
+    });
+
+    async function triggerPWAInstall() {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === "accepted") {
+        deferredInstallPrompt = null;
+        const btnInstall = document.getElementById("btn-install-pwa");
+        if (btnInstall) btnInstall.classList.add("hidden");
+      }
+    }
+
+    // Pemantauan Status Jaringan (Online / Offline)
+    window.addEventListener("online", () => {
+      initSupabase();
+      if (!IS_PREVIEW && supabaseClient) {
+        syncPendingQueue(false).then(() => refreshData(true));
+      }
+    });
+
+    window.addEventListener("offline", () => {
+      if (!IS_PREVIEW && supabaseClient) {
+        updateDatabaseBadge("preview", "Offline (Cache Lokal)");
+      }
+      showToast("Koneksi terputus. Scan tetap disimpan ke antrean offline.", "warning");
+    });
+
+    // Inisialisasi Aplikasi Saat Start
+    window.addEventListener("DOMContentLoaded", () => {
+      loadLocalCache();
+      initSupabase();
+      renderHistoryTable();
+      loadAvailableCameras();
+
+      if (!IS_PREVIEW && supabaseClient && navigator.onLine) {
+        refreshData(false);
+      }
+
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js").catch((err) => {
+          console.warn("Registrasi Service Worker gagal:", err);
+        });
+      }
+
+      setInterval(() => {
+        updateLocationCounters();
+      }, 60000);
+    });
+  </script>
+</body>
+</html>
