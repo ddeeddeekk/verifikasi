@@ -1,6 +1,6 @@
 // Service Worker - Pemindai & Verifikasi Peserta Ujian
 // Naikkan angka versi ini setiap kali file aplikasi diubah agar perangkat memperbarui cache.
-const CACHE_NAME = 'cek-peserta-v2';
+const CACHE_NAME = 'cek-peserta-v3';
 
 const APP_SHELL = [
   './',

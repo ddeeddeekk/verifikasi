@@ -299,23 +299,75 @@
           </div>
 
           <div class="grid grid-cols-3 gap-2">
-            <div class="bg-white rounded-xl p-2.5 border border-emerald-200 shadow-sm text-center flex flex-col justify-center">
-              <span class="text-[9px] font-bold uppercase text-slate-400 tracking-wider">TOTAL</span>
+            <button type="button" onclick="switchHistorySubTab('all')" class="bg-white hover:bg-emerald-50/40 rounded-xl p-2.5 border border-emerald-200 shadow-sm text-center flex flex-col justify-center transition active:scale-95">
+              <span class="text-[9px] font-bold uppercase text-slate-400 tracking-wider">TOTAL SESI</span>
               <span id="stat-total-session" class="text-xl sm:text-2xl font-black text-emerald-800 font-mono mt-0.5">0</span>
-            </div>
-            <div class="bg-white rounded-xl p-2.5 border border-slate-200 shadow-sm text-center flex flex-col justify-center">
+            </button>
+            <button type="button" onclick="switchHistorySubTab('lt2')" class="bg-white hover:bg-emerald-50/40 rounded-xl p-2.5 border border-slate-200 shadow-sm text-center flex flex-col justify-center transition active:scale-95">
               <span class="text-[9px] font-bold uppercase text-emerald-700 tracking-wider">LT. 2</span>
               <span id="stat-lt2-session" class="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">0</span>
-            </div>
-            <div class="bg-white rounded-xl p-2.5 border border-slate-200 shadow-sm text-center flex flex-col justify-center">
+            </button>
+            <button type="button" onclick="switchHistorySubTab('lt3')" class="bg-white hover:bg-emerald-50/40 rounded-xl p-2.5 border border-slate-200 shadow-sm text-center flex flex-col justify-center transition active:scale-95">
               <span class="text-[9px] font-bold uppercase text-emerald-700 tracking-wider">LT. 3</span>
               <span id="stat-lt3-session" class="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-0.5">0</span>
-            </div>
+            </button>
           </div>
         </div>
 
-        <!-- Tabel Log Riwayat -->
-        <div class="overflow-x-auto rounded-xl border border-slate-200/80 max-h-[460px] overflow-y-auto">
+        <!-- SUB-TAB NAVIGASI TABEL KEHADIRAN -->
+        <div class="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+          <button type="button" id="subtab-btn-lt2" onclick="switchHistorySubTab('lt2')" class="py-2 px-2 rounded-lg text-[11px] font-bold bg-emerald-800 text-white shadow-sm transition flex items-center justify-center gap-1.5">
+            <span>Lantai 2</span>
+            <span id="subtab-count-lt2" class="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-emerald-900/60 text-emerald-100">0</span>
+          </button>
+          <button type="button" id="subtab-btn-lt3" onclick="switchHistorySubTab('lt3')" class="py-2 px-2 rounded-lg text-[11px] font-bold text-slate-600 hover:text-emerald-800 hover:bg-white/70 transition flex items-center justify-center gap-1.5">
+            <span>Lantai 3</span>
+            <span id="subtab-count-lt3" class="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-slate-200 text-slate-700">0</span>
+          </button>
+          <button type="button" id="subtab-btn-all" onclick="switchHistorySubTab('all')" class="py-2 px-2 rounded-lg text-[11px] font-bold text-slate-600 hover:text-emerald-800 hover:bg-white/70 transition flex items-center justify-center gap-1.5">
+            <span>Semua Log</span>
+            <span id="subtab-count-all" class="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-slate-200 text-slate-700">0</span>
+          </button>
+        </div>
+
+        <!-- TAB PANEL: RINGKASAN LT. 2 (KURSI 1-50 SESI SAAT INI) -->
+        <div id="history-panel-lt2" class="overflow-x-auto rounded-xl border border-slate-200/80 max-h-[460px] overflow-y-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="sticky top-0 bg-emerald-50/90 backdrop-blur-sm z-10">
+              <tr class="text-emerald-950 border-b border-emerald-200/80 font-semibold text-[11px]">
+                <th class="py-2.5 px-2.5 text-center w-14">Kursi</th>
+                <th class="py-2.5 px-3">Waktu</th>
+                <th class="py-2.5 px-3">No. Peserta</th>
+                <th class="py-2.5 px-3">Nama</th>
+                <th class="py-2.5 px-3">Catatan</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-lt2-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Baris 1-50 terisi lewat JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TAB PANEL: RINGKASAN LT. 3 (KURSI 1-50 SESI SAAT INI) -->
+        <div id="history-panel-lt3" class="hidden overflow-x-auto rounded-xl border border-slate-200/80 max-h-[460px] overflow-y-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="sticky top-0 bg-emerald-50/90 backdrop-blur-sm z-10">
+              <tr class="text-emerald-950 border-b border-emerald-200/80 font-semibold text-[11px]">
+                <th class="py-2.5 px-2.5 text-center w-14">Kursi</th>
+                <th class="py-2.5 px-3">Waktu</th>
+                <th class="py-2.5 px-3">No. Peserta</th>
+                <th class="py-2.5 px-3">Nama</th>
+                <th class="py-2.5 px-3">Catatan</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-lt3-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Baris 1-50 terisi lewat JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TAB PANEL: SEMUA LOG KEHADIRAN PESERTA -->
+        <div id="history-panel-all" class="hidden overflow-x-auto rounded-xl border border-slate-200/80 max-h-[460px] overflow-y-auto">
           <table class="w-full text-left text-xs border-collapse">
             <thead class="sticky top-0 bg-emerald-50/90 backdrop-blur-sm z-10">
               <tr class="text-emerald-950 border-b border-emerald-200/80 font-semibold text-[11px]">
@@ -329,8 +381,8 @@
                 <th class="py-2.5 px-3">Catatan</th>
               </tr>
             </thead>
-            <tbody id="history-table-body" class="divide-y divide-slate-100 text-slate-700">
-              <!-- Item terisi lewat JS -->
+            <tbody id="history-table-all-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Seluruh item terisi lewat JS -->
             </tbody>
           </table>
         </div>
@@ -1514,6 +1566,46 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       return `${lt} ${sesi}`.trim();
     }
 
+    let activeHistorySubTab = "lt2";
+
+    function getItemFloor(item) {
+      const noPeserta = item.noPeserta || item.no_peserta || "";
+      const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
+      if (cleanNo.length >= 7) {
+        const d7 = cleanNo.charAt(6);
+        if (d7 === '1' || d7 === '3') return "lt2";
+        if (d7 === '2' || d7 === '4') return "lt3";
+      }
+      const ruangText = String(item.ruang || "").toUpperCase();
+      if (ruangText.includes("2") || ruangText.includes("LANTAI 2") || ruangText.includes("LT 2")) return "lt2";
+      if (ruangText.includes("3") || ruangText.includes("LANTAI 3") || ruangText.includes("LT 3")) return "lt3";
+      return "";
+    }
+
+    function switchHistorySubTab(subTab) {
+      activeHistorySubTab = subTab;
+      const tabs = ["lt2", "lt3", "all"];
+
+      tabs.forEach(t => {
+        const panel = document.getElementById(`history-panel-${t}`);
+        const btn = document.getElementById(`subtab-btn-${t}`);
+        const badge = document.getElementById(`subtab-count-${t}`);
+        const isActive = (t === subTab);
+
+        if (panel) panel.classList.toggle("hidden", !isActive);
+        if (btn) {
+          btn.className = isActive
+            ? "py-2 px-2 rounded-lg text-[11px] font-bold bg-emerald-800 text-white shadow-sm transition flex items-center justify-center gap-1.5"
+            : "py-2 px-2 rounded-lg text-[11px] font-bold text-slate-600 hover:text-emerald-800 hover:bg-white/70 transition flex items-center justify-center gap-1.5";
+        }
+        if (badge) {
+          badge.className = isActive
+            ? "px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-emerald-900/60 text-emerald-100"
+            : "px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-slate-200 text-slate-700";
+        }
+      });
+    }
+
     function updateLocationCounters() {
       const activeSession = getCurrentActiveSession();
       let lt2CurrentSessionCount = 0;
@@ -1531,23 +1623,9 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       scanHistory.forEach(item => {
         const info = getParticipantDateAndSession(item);
         if (info.isToday && info.sessionType === activeSession.key) {
-          let isLt2 = false;
-          let isLt3 = false;
-          const noPeserta = item.noPeserta || item.no_peserta || "";
-          const cleanNo = String(noPeserta).trim().replace(/\D/g, '');
-          if (cleanNo.length >= 7) {
-            const d7 = cleanNo.charAt(6);
-            if (d7 === '1' || d7 === '3') isLt2 = true;
-            if (d7 === '2' || d7 === '4') isLt3 = true;
-          }
-          if (!isLt2 && !isLt3) {
-            const ruangText = String(item.ruang || "").toUpperCase();
-            if (ruangText.includes("2") || ruangText.includes("LANTAI 2") || ruangText.includes("LT 2")) isLt2 = true;
-            else if (ruangText.includes("3") || ruangText.includes("LANTAI 3") || ruangText.includes("LT 3")) isLt3 = true;
-          }
-
-          if (isLt2) lt2CurrentSessionCount++;
-          if (isLt3) lt3CurrentSessionCount++;
+          const floor = getItemFloor(item);
+          if (floor === "lt2") lt2CurrentSessionCount++;
+          else if (floor === "lt3") lt3CurrentSessionCount++;
         }
       });
 
@@ -1565,19 +1643,122 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       if (statTotal) statTotal.innerText = totalCurrentSession;
       if (statLt2) statLt2.innerText = lt2CurrentSessionCount;
       if (statLt3) statLt3.innerText = lt3CurrentSessionCount;
+
+      const subLt2 = document.getElementById("subtab-count-lt2");
+      const subLt3 = document.getElementById("subtab-count-lt3");
+      const subAll = document.getElementById("subtab-count-all");
+      if (subLt2) subLt2.innerText = `${lt2CurrentSessionCount}/50`;
+      if (subLt3) subLt3.innerText = `${lt3CurrentSessionCount}/50`;
+      if (subAll) subAll.innerText = String(scanHistory.length);
     }
 
-    function renderHistoryTable(dataList = scanHistory) {
-      const tbody = document.getElementById("history-table-body");
-      updateLocationCounters();
+    function createTableCell(className, text) {
+      const td = document.createElement("td");
+      td.className = className;
+      td.textContent = text;
+      return td;
+    }
+
+    function appendNoteCell(tr, item, isMuted = false) {
+      const tdNote = document.createElement("td");
+      tdNote.className = isMuted ? "py-2 px-3 text-slate-300" : "py-2 px-3 text-slate-500";
+      if (item && item.isPending) {
+        const pendingBadge = document.createElement("span");
+        pendingBadge.className = "inline-block mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase";
+        pendingBadge.textContent = "Offline";
+        tdNote.appendChild(pendingBadge);
+      }
+      tdNote.appendChild(document.createTextNode(item ? (item.note || "-") : "-"));
+      tr.appendChild(tdNote);
+    }
+
+    function renderFloorSeatTable(tbodyId, floorKey, query = "") {
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return;
       tbody.innerHTML = "";
+
+      const activeSession = getCurrentActiveSession();
+      const seatMap = {};
+
+      scanHistory.forEach(item => {
+        const info = getParticipantDateAndSession(item);
+        if (!info.isToday || info.sessionType !== activeSession.key) return;
+        if (getItemFloor(item) !== floorKey) return;
+
+        const seatNum = parseInt(String(item.kursi || "").replace(/\D/g, ""), 10);
+        if (!isNaN(seatNum) && seatNum >= 1 && seatNum <= 50 && !seatMap[seatNum]) {
+          seatMap[seatNum] = item;
+        }
+      });
+
+      let renderedCount = 0;
+
+      for (let seat = 1; seat <= 50; seat++) {
+        const item = seatMap[seat] || null;
+        if (query) {
+          const seatStr = String(seat);
+          const seatPad = seatStr.padStart(2, "0");
+          const noP = item ? String(item.noPeserta || item.no_peserta || "").toLowerCase() : "";
+          const nm = item ? String(item.nama || "").toLowerCase() : "";
+          const nt = item ? String(item.note || "").toLowerCase() : "";
+          const match = seatStr.includes(query) || seatPad.includes(query) || noP.includes(query) || nm.includes(query) || nt.includes(query);
+          if (!match) continue;
+        }
+
+        renderedCount++;
+        const tr = document.createElement("tr");
+
+        if (item) {
+          tr.className = "bg-emerald-50/30 hover:bg-emerald-50/70 transition border-b border-slate-100 text-[11px]";
+          tr.appendChild(createTableCell("py-2 px-2.5 text-center font-mono font-black text-emerald-800 bg-emerald-100/60", String(seat)));
+          tr.appendChild(createTableCell("py-2 px-3 text-slate-500 whitespace-nowrap font-mono font-bold", formatTimeOnly(item.timestamp || item.scanned_at || "-")));
+          tr.appendChild(createTableCell("py-2 px-3 font-mono font-bold text-emerald-900", item.noPeserta || item.no_peserta || "-"));
+          tr.appendChild(createTableCell("py-2 px-3 font-semibold text-slate-800", item.nama || "-"));
+          appendNoteCell(tr, item, false);
+        } else {
+          tr.className = "hover:bg-slate-50/80 transition border-b border-slate-100 text-[11px]";
+          tr.appendChild(createTableCell("py-2 px-2.5 text-center font-mono font-bold text-slate-400 bg-slate-50/70", String(seat)));
+          tr.appendChild(createTableCell("py-2 px-3 text-slate-300 font-mono", "-"));
+          tr.appendChild(createTableCell("py-2 px-3 text-slate-300 font-mono", "-"));
+          tr.appendChild(createTableCell("py-2 px-3 text-slate-300", "-"));
+          appendNoteCell(tr, null, true);
+        }
+
+        tbody.appendChild(tr);
+      }
+
+      if (renderedCount === 0) {
+        const emptyTr = document.createElement("tr");
+        const emptyTd = document.createElement("td");
+        emptyTd.colSpan = 5;
+        emptyTd.className = "py-6 text-center text-slate-400";
+        emptyTd.textContent = "Tidak ada nomor kursi atau peserta yang cocok.";
+        emptyTr.appendChild(emptyTd);
+        tbody.appendChild(emptyTr);
+      }
+    }
+
+    function renderAllLogsTable(query = "") {
+      const tbody = document.getElementById("history-table-all-body");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+
+      const dataList = query
+        ? scanHistory.filter(item => {
+            const noP = (item.noPeserta || item.no_peserta || "").toLowerCase();
+            const nm = (item.nama || "").toLowerCase();
+            const nt = (item.note || "").toLowerCase();
+            const kr = String(item.kursi || "").toLowerCase();
+            return noP.includes(query) || nm.includes(query) || nt.includes(query) || kr.includes(query);
+          })
+        : scanHistory;
 
       if (dataList.length === 0) {
         const emptyTr = document.createElement("tr");
         const emptyTd = document.createElement("td");
         emptyTd.colSpan = 8;
         emptyTd.className = "py-6 text-center text-slate-400";
-        emptyTd.textContent = "Belum ada data scan.";
+        emptyTd.textContent = query ? "Tidak ada data yang cocok." : "Belum ada data scan.";
         emptyTr.appendChild(emptyTd);
         tbody.appendChild(emptyTr);
         return;
@@ -1593,7 +1774,6 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
         const ruang = item.ruang || "-";
         const waktu = item.waktu || "-";
         const kursi = item.kursi || "--";
-        const note = item.note || "-";
 
         const tglRingkas = item.tglTesShort || formatShortDate(tglTes, noPeserta);
         const ruangSesiRingkas = formatRuangSesiCompact(ruang, waktu, noPeserta);
@@ -1601,18 +1781,11 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
         const tr = document.createElement("tr");
         tr.className = "hover:bg-emerald-50/40 transition border-b border-slate-100 text-[11px]";
 
-        const createCell = (className, text) => {
-          const td = document.createElement("td");
-          td.className = className;
-          td.textContent = text;
-          return td;
-        };
-
-        tr.appendChild(createCell("py-2.5 px-2.5 text-center font-bold text-slate-500", String(noTampil)));
-        tr.appendChild(createCell("py-2.5 px-3 text-slate-500 whitespace-nowrap font-mono font-bold", jamSaja));
-        tr.appendChild(createCell("py-2.5 px-3 font-mono font-bold text-emerald-900", noPeserta));
-        tr.appendChild(createCell("py-2.5 px-3 font-semibold text-slate-800", nama));
-        tr.appendChild(createCell("py-2.5 px-3 text-slate-600 whitespace-nowrap font-medium", tglRingkas));
+        tr.appendChild(createTableCell("py-2.5 px-2.5 text-center font-bold text-slate-500", String(noTampil)));
+        tr.appendChild(createTableCell("py-2.5 px-3 text-slate-500 whitespace-nowrap font-mono font-bold", jamSaja));
+        tr.appendChild(createTableCell("py-2.5 px-3 font-mono font-bold text-emerald-900", noPeserta));
+        tr.appendChild(createTableCell("py-2.5 px-3 font-semibold text-slate-800", nama));
+        tr.appendChild(createTableCell("py-2.5 px-3 text-slate-600 whitespace-nowrap font-medium", tglRingkas));
 
         const tdRuang = document.createElement("td");
         tdRuang.className = "py-2.5 px-3 text-emerald-900 font-bold whitespace-nowrap";
@@ -1622,32 +1795,25 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
         tdRuang.appendChild(badgeRuang);
         tr.appendChild(tdRuang);
 
-        tr.appendChild(createCell("py-2.5 px-3 text-center font-mono font-black text-emerald-700 bg-emerald-50/50", kursi));
-
-        const tdNote = document.createElement("td");
-        tdNote.className = "py-2.5 px-3 text-slate-500";
-        if (item.isPending) {
-          const pendingBadge = document.createElement("span");
-          pendingBadge.className = "inline-block mr-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase";
-          pendingBadge.textContent = "Offline";
-          tdNote.appendChild(pendingBadge);
-        }
-        tdNote.appendChild(document.createTextNode(note));
-        tr.appendChild(tdNote);
+        tr.appendChild(createTableCell("py-2.5 px-3 text-center font-mono font-black text-emerald-700 bg-emerald-50/50", kursi));
+        appendNoteCell(tr, item, false);
 
         tbody.appendChild(tr);
       });
     }
 
+    function renderHistoryTable() {
+      const searchInput = document.getElementById("history-search");
+      const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+
+      updateLocationCounters();
+      renderFloorSeatTable("history-table-lt2-body", "lt2", query);
+      renderFloorSeatTable("history-table-lt3-body", "lt3", query);
+      renderAllLogsTable(query);
+    }
+
     function filterHistoryTable() {
-      const query = document.getElementById("history-search").value.toLowerCase();
-      const filtered = scanHistory.filter(item => {
-        const noP = (item.noPeserta || item.no_peserta || "").toLowerCase();
-        const nm = (item.nama || "").toLowerCase();
-        const nt = (item.note || "").toLowerCase();
-        return noP.includes(query) || nm.includes(query) || nt.includes(query);
-      });
-      renderHistoryTable(filtered);
+      renderHistoryTable();
     }
 
     async function refreshData(silent = false) {
@@ -1660,9 +1826,9 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
         await syncPendingQueue(true);
       }
 
-      const tbody = document.getElementById("history-table-body");
-      if (!silent && tbody && scanHistory.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-emerald-700"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Memuat data dari Supabase...</td></tr>`;
+      const tbodyAll = document.getElementById("history-table-all-body");
+      if (!silent && tbodyAll && scanHistory.length === 0) {
+        tbodyAll.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-emerald-700"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Memuat data dari Supabase...</td></tr>`;
       }
 
       try {
