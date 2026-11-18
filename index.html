@@ -245,9 +245,13 @@
               </div>
             </div>
 
-            <!-- Tombol Simpan Manual -->
-            <div class="mt-2 pt-1.5 border-t border-slate-100">
-              <div id="warning-notice-manual" class="hidden mb-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-1.5 font-medium">
+            <!-- Input Manual & Tombol Simpan -->
+            <div class="mt-2 pt-2 border-t border-slate-100 space-y-2">
+              <div class="relative">
+                <i class="fa-solid fa-keyboard absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input type="text" id="manual-no-peserta" inputmode="numeric" maxlength="20" oninput="handleManualParticipantInput(this.value)" onkeydown="handleManualKeyDown(event)" placeholder="Input manual No. Peserta (min. 10 digit)" class="w-full pl-8 pr-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50/50">
+              </div>
+              <div id="warning-notice-manual" class="hidden p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-1.5 font-medium">
                 <i class="fa-solid fa-triangle-exclamation text-rose-600 flex-shrink-0"></i>
                 <span>Jadwal tidak sesuai! Tekan Simpan jika tetap diizinkan.</span>
               </div>
@@ -885,7 +889,63 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       lastScannedTimestamp = nowTs;
 
       playBeepSound();
+      const manualInput = document.getElementById("manual-no-peserta");
+      if (manualInput) manualInput.value = "";
+
       const data = processQRContent(rawText);
+      renderParticipantVerification(data, true);
+    }
+
+    function handleManualParticipantInput(rawValue) {
+      const cleanDigits = String(rawValue || "").replace(/\D/g, "");
+      if (cleanDigits.length < 10) {
+        if (currentParticipantData && currentParticipantData.isManualInput) {
+          clearScanDisplay(false);
+        }
+        return;
+      }
+
+      const parsedInfo = parseParticipantNumber(cleanDigits);
+      if (!parsedInfo) return;
+
+      let photoUrl = "";
+      if (cleanDigits.length >= 12) {
+        const first12Digits = cleanDigits.substring(0, 12);
+        photoUrl = `https://suliet.unsri.ac.id/usept/upload/foto_suliet/9999${first12Digits}.jpg`;
+      }
+
+      const data = {
+        raw: "MANUAL:" + cleanDigits,
+        decodedFull: cleanDigits,
+        noPeserta: parsedInfo.noPeserta,
+        nama: "PESERTA (INPUT MANUAL)",
+        tglTes: parsedInfo.tglTes,
+        tglTesShort: parsedInfo.tglTesShort,
+        isToday: parsedInfo.isToday,
+        isTimeValid: parsedInfo.isTimeValid,
+        ruang: parsedInfo.ruang,
+        lantai: parsedInfo.lantai,
+        waktu: parsedInfo.waktu,
+        sessionType: parsedInfo.sessionType,
+        kursi: parsedInfo.kursi,
+        photoUrl: photoUrl,
+        isManualInput: true
+      };
+
+      renderParticipantVerification(data, false);
+    }
+
+    function handleManualKeyDown(event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const btnSave = document.getElementById("btn-save-record");
+        if (btnSave && !btnSave.disabled) {
+          saveCurrentRecord(true);
+        }
+      }
+    }
+
+    function renderParticipantVerification(data, autoSaveIfValid = true) {
       currentParticipantData = data;
 
       document.getElementById("val-no-peserta").innerText = data.noPeserta;
@@ -962,11 +1022,16 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       } else if (hasScheduleIssue) {
         btnSave.disabled = false;
         warningNoticeManual.classList.remove("hidden");
-        showToast("Jadwal tidak sesuai! Auto-save dihentikan.", "warning");
-      } else {
+        if (autoSaveIfValid) {
+          showToast("Jadwal tidak sesuai! Auto-save dihentikan.", "warning");
+        }
+      } else if (autoSaveIfValid) {
         warningNoticeManual.classList.add("hidden");
         btnSave.disabled = true;
         executeSave(false);
+      } else {
+        warningNoticeManual.classList.add("hidden");
+        btnSave.disabled = false;
       }
     }
 
@@ -1162,7 +1227,7 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       }
     }
 
-    function clearScanDisplay() {
+    function clearScanDisplay(clearManualInput = true) {
       currentParticipantData = null;
       lastScannedRaw = "";
       lastScannedTimestamp = 0;
@@ -1200,8 +1265,16 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       if (valWaktu) valWaktu.className = "text-xs sm:text-sm font-bold text-slate-800 block mt-0.5 leading-snug truncate";
       if (badgeWaktu) badgeWaktu.classList.add("hidden");
 
+      resetScanFormInputs(clearManualInput);
+    }
+
+    function resetScanFormInputs(clearManual = true) {
       const scanNote = document.getElementById("scan-note");
       if (scanNote) scanNote.value = "";
+      if (clearManual) {
+        const manualInput = document.getElementById("manual-no-peserta");
+        if (manualInput) manualInput.value = "";
+      }
       const btnSave = document.getElementById("btn-save-record");
       if (btnSave) btnSave.disabled = true;
       const warningNotice = document.getElementById("warning-notice-manual");
@@ -1263,10 +1336,7 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
         saveLocalHistory();
         renderHistoryTable();
         showToast(isManual ? "Tersimpan manual ke kehadiran (Lokal)." : "Tersimpan otomatis ke memori lokal!", "success");
-        
-        document.getElementById("scan-note").value = "";
-        document.getElementById("btn-save-record").disabled = true;
-        document.getElementById("warning-notice-manual").classList.add("hidden");
+        resetScanFormInputs(true);
       } else {
         const payload = {
           no_peserta: record.noPeserta,
@@ -1301,17 +1371,14 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
           if (error) {
             // Handle error duplicate key constraint postgres
             if (error.code === '23505') {
-              btn.disabled = true;
               showToast("Peserta sudah ada di database Supabase (duplikasi dicegah).", "warning");
-              document.getElementById("scan-note").value = "";
-              document.getElementById("warning-notice-manual").classList.add("hidden");
+              resetScanFormInputs(true);
               refreshData(true);
             } else {
               btn.disabled = false;
               showToast("Gagal simpan ke Supabase: " + error.message, "error");
             }
           } else {
-            btn.disabled = true;
             const savedRow = (data && data[0]) ? {
               noUrut: scanHistory.length + 1,
               id: data[0].id,
@@ -1334,8 +1401,7 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
             renderHistoryTable();
 
             showToast("Berhasil tersimpan di database!", "success");
-            document.getElementById("scan-note").value = "";
-            document.getElementById("warning-notice-manual").classList.add("hidden");
+            resetScanFormInputs(true);
 
             if (pendingQueue.length > 0) {
               syncPendingQueue(true);
@@ -1357,9 +1423,7 @@ CREATE INDEX IF NOT EXISTS idx_attendance_scanned_at ON attendance_logs(scanned_
       saveLocalHistory();
       renderHistoryTable();
 
-      document.getElementById("scan-note").value = "";
-      document.getElementById("btn-save-record").disabled = true;
-      document.getElementById("warning-notice-manual").classList.add("hidden");
+      resetScanFormInputs(true);
       showToast("Jaringan terputus! Data disimpan di antrean offline.", "warning");
     }
 
